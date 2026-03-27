@@ -1,0 +1,10 @@
+## Interface: 120001
+## Title: BuddyFlash
+## Notes: Screen flash, sound alerts & animated banners when your friends log in. Custom avatars, per-friend sounds, auto-whisper.
+## Author: wowadd
+## Version: 1.0.0
+## SavedVariables: BuddyFlashDB
+
+AvatarManifest.lua
+BuddyFlash.lua
+Options.lua
