@@ -57,8 +57,6 @@ local defaults = {
     -- Login History: { { key="bnet_123", name="Tag (Char)", time=timestamp, isLogin=true }, ... }
     loginHistory = {},
     loginHistoryMax = 100, -- max entries to keep
-    -- Auto-whisper: { ["BattleTag#1234"] = "message", ["CharName"] = "message" }
-    autoWhisper = {},
     -- Per-friend sound: { ["BattleTag#1234"] = soundIndex, ["CharName"] = soundIndex }
     friendSounds = {},
     -- Known alts per BNet account: { ["BattleTag#1234"] = { "Char1", "Char2", ... } }
@@ -438,35 +436,11 @@ local function ShowContextMenu(row, friendData)
         end
     end
 
-    -- Auto-whisper toggle
-    local whisperKey = friendData.bnetTag or friendData.charName
-    if whisperKey then
+    -- Per-friend sound submenu
+    local soundKey = friendData.bnetTag or friendData.charName
+    if soundKey then
         local db = GetDB()
-        local currentWhisper = db.autoWhisper[whisperKey]
-        if currentWhisper then
-            table.insert(menuList, {
-                text = "Auto-whisper: \"" .. currentWhisper .. "\"",
-                isTitle = true,
-                notCheckable = true,
-            })
-            table.insert(menuList, {
-                text = "Remove Auto-whisper",
-                notCheckable = true,
-                func = function()
-                    db.autoWhisper[whisperKey] = nil
-                    print("|cFF69CCF0BuddyFlash:|r Auto-whisper removed for " .. whisperKey)
-                end,
-            })
-        else
-            table.insert(menuList, {
-                text = "Set Auto-whisper: /fa whisper " .. whisperKey .. " <msg>",
-                isTitle = true,
-                notCheckable = true,
-            })
-        end
-
-        -- Per-friend sound submenu
-        local currentSound = db.friendSounds[whisperKey]
+        local currentSound = db.friendSounds[soundKey]
         if currentSound and SOUND_OPTIONS[currentSound] then
             table.insert(menuList, {
                 text = "Sound: " .. SOUND_OPTIONS[currentSound].name,
@@ -477,13 +451,13 @@ local function ShowContextMenu(row, friendData)
                 text = "Remove Custom Sound",
                 notCheckable = true,
                 func = function()
-                    db.friendSounds[whisperKey] = nil
-                    print("|cFF69CCF0BuddyFlash:|r Custom sound removed for " .. whisperKey)
+                    db.friendSounds[soundKey] = nil
+                    print("|cFF69CCF0BuddyFlash:|r Custom sound removed for " .. soundKey)
                 end,
             })
         else
             table.insert(menuList, {
-                text = "Set Sound: /fa friendsound " .. whisperKey .. " <num>",
+                text = "Set Sound: /fa friendsound " .. soundKey .. " <num>",
                 isTitle = true,
                 notCheckable = true,
             })
@@ -587,18 +561,6 @@ local function GetRow(index)
                     local marker = (altName == fd.charName) and " |cFF00FF00<< now|r" or ""
                     GameTooltip:AddLine("  " .. altName .. marker, 0.8, 0.8, 0.8)
                 end
-            end
-
-            -- Auto-whisper status
-            local whisperMsg = nil
-            if fd.bnetTag and db.autoWhisper[fd.bnetTag] then
-                whisperMsg = db.autoWhisper[fd.bnetTag]
-            elseif fd.charName and db.autoWhisper[fd.charName] then
-                whisperMsg = db.autoWhisper[fd.charName]
-            end
-            if whisperMsg then
-                GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Auto-whisper: \"" .. whisperMsg .. "\"", 0.4, 1.0, 0.4)
             end
 
             -- Per-friend sound
@@ -839,24 +801,6 @@ local function UpdateListUI()
                     table.remove(db.loginHistory)
                 end
 
-                -- Auto-whisper (delayed to ensure connection is ready)
-                local whisperMsg = nil
-                if friend.bnetTag and db.autoWhisper[friend.bnetTag] then
-                    whisperMsg = db.autoWhisper[friend.bnetTag]
-                elseif friend.charName and db.autoWhisper[friend.charName] then
-                    whisperMsg = db.autoWhisper[friend.charName]
-                end
-                if whisperMsg and friend.isBNet and friend.bnetAccountID then
-                    C_Timer.After(2, function()
-                        BNSendWhisper(friend.bnetAccountID, whisperMsg)
-                        print("|cFF69CCF0BuddyFlash:|r Auto-whisper sent to |cFFFFFF00" .. friend.name .. "|r: " .. whisperMsg)
-                    end)
-                elseif whisperMsg and friend.charName then
-                    C_Timer.After(2, function()
-                        SendChatMessage(whisperMsg, "WHISPER", nil, friend.charName)
-                        print("|cFF69CCF0BuddyFlash:|r Auto-whisper sent to |cFFFFFF00" .. friend.charName .. "|r: " .. whisperMsg)
-                    end)
-                end
             end
         end
     end
@@ -1169,37 +1113,6 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             end
         end
 
-    -- /fa whisper <name> <message>
-    elseif cmd:match("^whisper%s+%S+%s+.+$") then
-        local target, message = cmd:match("^whisper%s+(%S+)%s+(.+)$")
-        local db = GetDB()
-        db.autoWhisper[target] = message
-        print("|cFF69CCF0BuddyFlash:|r Auto-whisper set for |cFFFFFF00" .. target .. "|r: \"" .. message .. "\"")
-
-    -- /fa whisper-remove <name>
-    elseif cmd:match("^whisper%-remove%s+%S+$") then
-        local target = cmd:match("^whisper%-remove%s+(%S+)$")
-        local db = GetDB()
-        if db.autoWhisper[target] then
-            db.autoWhisper[target] = nil
-            print("|cFF69CCF0BuddyFlash:|r Auto-whisper removed for |cFFFFFF00" .. target .. "|r")
-        else
-            print("|cFF69CCF0BuddyFlash:|r No auto-whisper set for |cFFFFFF00" .. target .. "|r")
-        end
-
-    -- /fa whispers (list all)
-    elseif cmd == "whispers" then
-        local db = GetDB()
-        local count = 0
-        print("|cFF69CCF0BuddyFlash - Auto-whispers:|r")
-        for target, message in pairs(db.autoWhisper) do
-            print(string.format("  |cFFFFFF00%s|r -> \"%s\"", target, message))
-            count = count + 1
-        end
-        if count == 0 then
-            print("  |cFF888888No auto-whispers configured.|r")
-        end
-
     -- /fa friendsound <name> <number>
     elseif cmd:match("^friendsound%s+%S+%s+%d+$") then
         local target, num = cmd:match("^friendsound%s+(%S+)%s+(%d+)$")
@@ -1330,11 +1243,6 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         print("  /fa alts                - Show known alts per BNet account")
         print("  /fa alts <BattleTag>    - Show alts for specific friend")
         print(" ")
-        print("|cFF69CCF0Auto-whisper:|r")
-        print("  /fa whisper <name> <msg> - Set auto-whisper on login")
-        print("  /fa whisper-remove <name> - Remove auto-whisper")
-        print("  /fa whispers            - List all auto-whispers")
-        print(" ")
         print("|cFF69CCF0Per-friend sounds:|r")
         print("  /fa friendsound <name> <num> - Set sound for friend")
         print("  /fa friendsound-remove <name> - Remove (use global)")
@@ -1342,6 +1250,6 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         print(" ")
         print("  |cFF888888Put .tga/.blp files in: AddOns/BuddyFlash/Avatars/|r")
         print("  |cFF888888Right-click a friend for: Invite, Inspect, Whisper, Target|r")
-        print("  |cFF888888Hover a friend to see: last seen, alts, whisper, sound|r")
+        print("  |cFF888888Hover a friend to see: last seen, alts, sound|r")
     end
 end
