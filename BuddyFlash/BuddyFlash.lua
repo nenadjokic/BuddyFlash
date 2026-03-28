@@ -432,7 +432,7 @@ local function ShowContextMenu(row, friendData)
             })
         else
             table.insert(menuList, {
-                text = "Set Avatar: /fa avatar " .. friendData.charName .. " <file>",
+                text = "Set Avatar: /bf avatar " .. friendData.charName .. " <file>",
                 isTitle = true,
                 notCheckable = true,
             })
@@ -980,7 +980,6 @@ end)
 
 SLASH_BUDDYFLASH1 = "/bf"
 SLASH_BUDDYFLASH2 = "/buddyflash"
-SLASH_BUDDYFLASH3 = "/fa"  -- backward compat with FriendAlert
 
 SlashCmdList["BUDDYFLASH"] = function(msg)
     local cmd = msg:lower():trim()
@@ -1029,7 +1028,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             local marker = (i == db.soundChoice) and " |cFF00FF00<< current|r" or ""
             print(string.format("  |cFFFFFF00%d|r - %s%s", i, s.name, marker))
         end
-        print("Use |cFFFFFF00/fa sound <number>|r to change.")
+        print("Use |cFFFFFF00/bf sound <number>|r to change.")
 
     elseif cmd == "soundtest" then
         local db = GetDB()
@@ -1074,7 +1073,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r No custom avatar found for |cFFFFFF00" .. charName .. "|r")
         end
 
-    -- /fa history [count]
+    -- /bf history [count]
     elseif cmd == "history" or cmd:match("^history%s+%d+$") then
         local count = tonumber(cmd:match("^history%s+(%d+)$")) or 20
         local db = GetDB()
@@ -1091,7 +1090,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             end
         end
 
-    -- /fa lastseen <name>
+    -- /bf lastseen <name>
     elseif cmd:match("^lastseen%s+.+$") then
         local searchName = cmd:match("^lastseen%s+(.+)$"):trim()
         local db = GetDB()
@@ -1111,7 +1110,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r No last seen data for '" .. searchName .. "'")
         end
 
-    -- /fa lastseen (no args - show all)
+    -- /bf lastseen (no args - show all)
     elseif cmd == "lastseen" then
         local db = GetDB()
         local entries = {}
@@ -1133,14 +1132,14 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             end
         end
 
-    -- /fa whisper <name> <message>
+    -- /bf whisper <name> <message>
     elseif cmd:match("^whisper%s+%S+%s+.+$") then
         local target, message = cmd:match("^whisper%s+(%S+)%s+(.+)$")
         local db = GetDB()
         db.autoWhisper[target] = message
         print("|cFF69CCF0BuddyFlash:|r Auto-whisper set for |cFFFFFF00" .. target .. "|r: \"" .. message .. "\"")
 
-    -- /fa whisper-remove <name>
+    -- /bf whisper-remove <name>
     elseif cmd:match("^whisper%-remove%s+%S+$") then
         local target = cmd:match("^whisper%-remove%s+(%S+)$")
         local db = GetDB()
@@ -1151,7 +1150,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r No auto-whisper set for |cFFFFFF00" .. target .. "|r")
         end
 
-    -- /fa whispers (list all)
+    -- /bf whispers (list all)
     elseif cmd == "whispers" then
         local db = GetDB()
         local count = 0
@@ -1164,7 +1163,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("  |cFF888888No auto-whispers configured.|r")
         end
 
-    -- /fa friendsound <name> <number>
+    -- /bf friendsound <name> <number>
     elseif cmd:match("^friendsound%s+%S+%s+%d+$") then
         local target, num = cmd:match("^friendsound%s+(%S+)%s+(%d+)$")
         num = tonumber(num)
@@ -1178,7 +1177,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r Invalid sound number. Use 1-" .. #SOUND_OPTIONS)
         end
 
-    -- /fa friendsound-remove <name>
+    -- /bf friendsound-remove <name>
     elseif cmd:match("^friendsound%-remove%s+%S+$") then
         local target = cmd:match("^friendsound%-remove%s+(%S+)$")
         local db = GetDB()
@@ -1189,7 +1188,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r No custom sound set for |cFFFFFF00" .. target .. "|r")
         end
 
-    -- /fa friendsounds (list all)
+    -- /bf friendsounds (list all)
     elseif cmd == "friendsounds" then
         local db = GetDB()
         local count = 0
@@ -1203,7 +1202,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("  |cFF888888No per-friend sounds configured.|r")
         end
 
-    -- /fa alts <BattleTag>
+    -- /bf alts <BattleTag>
     elseif cmd:match("^alts%s+.+$") then
         local searchTag = cmd:match("^alts%s+(.+)$"):trim()
         local db = GetDB()
@@ -1221,7 +1220,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
             print("|cFF69CCF0BuddyFlash:|r No alt data for '" .. searchTag .. "'")
         end
 
-    -- /fa alts (list all)
+    -- /bf alts (list all)
     elseif cmd == "alts" then
         local db = GetDB()
         local count = 0
@@ -1250,7 +1249,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         print(" ")
         print("Place |cFF00FF00.tga|r or |cFF00FF00.blp|r files in:")
         print("  |cFF888888Interface/AddOns/BuddyFlash/Avatars/|r")
-        print("Then assign: |cFFFFFF00/fa avatar CharName filename|r")
+        print("Then assign: |cFFFFFF00/bf avatar CharName filename|r")
         print("  (filename without extension)")
 
     elseif cmd == "test" then
@@ -1270,39 +1269,39 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
 
     else
         print("|cFF69CCF0BuddyFlash commands:|r")
-        print("  /fa options             - Open settings GUI")
-        print("  /fa toggle              - Show/hide friend list")
-        print("  /fa flash               - Toggle flash effect")
-        print("  /fa sound               - Toggle login sound on/off")
-        print("  /fa sounds              - List all available sounds")
-        print("  /fa sound <num>         - Set login sound (1-" .. #SOUND_OPTIONS .. ")")
-        print("  /fa soundtest           - Preview current sound")
-        print("  /fa lock                - Lock/unlock window position")
-        print("  /fa test                - Test the flash effect")
-        print("  /fa reset               - Reset window position")
+        print("  /bf options             - Open settings GUI")
+        print("  /bf toggle              - Show/hide friend list")
+        print("  /bf flash               - Toggle flash effect")
+        print("  /bf sound               - Toggle login sound on/off")
+        print("  /bf sounds              - List all available sounds")
+        print("  /bf sound <num>         - Set login sound (1-" .. #SOUND_OPTIONS .. ")")
+        print("  /bf soundtest           - Preview current sound")
+        print("  /bf lock                - Lock/unlock window position")
+        print("  /bf test                - Test the flash effect")
+        print("  /bf reset               - Reset window position")
         print(" ")
         print("|cFF69CCF0Avatar commands:|r")
-        print("  /fa avatar <name> <img> - Set avatar for character")
-        print("  /fa avatar <name>       - Check current avatar")
-        print("  /fa avatar-remove <name> - Remove custom avatar")
-        print("  /fa avatars             - List all custom avatars")
+        print("  /bf avatar <name> <img> - Set avatar for character")
+        print("  /bf avatar <name>       - Check current avatar")
+        print("  /bf avatar-remove <name> - Remove custom avatar")
+        print("  /bf avatars             - List all custom avatars")
         print(" ")
         print("|cFF69CCF0History & Tracking:|r")
-        print("  /fa history [count]     - Show login/logout history")
-        print("  /fa lastseen            - Show last seen times for all")
-        print("  /fa lastseen <name>     - Last seen for specific friend")
-        print("  /fa alts                - Show known alts per BNet account")
-        print("  /fa alts <BattleTag>    - Show alts for specific friend")
+        print("  /bf history [count]     - Show login/logout history")
+        print("  /bf lastseen            - Show last seen times for all")
+        print("  /bf lastseen <name>     - Last seen for specific friend")
+        print("  /bf alts                - Show known alts per BNet account")
+        print("  /bf alts <BattleTag>    - Show alts for specific friend")
         print(" ")
         print("|cFF69CCF0Auto-whisper:|r")
-        print("  /fa whisper <name> <msg> - Set auto-whisper on login")
-        print("  /fa whisper-remove <name> - Remove auto-whisper")
-        print("  /fa whispers            - List all auto-whispers")
+        print("  /bf whisper <name> <msg> - Set auto-whisper on login")
+        print("  /bf whisper-remove <name> - Remove auto-whisper")
+        print("  /bf whispers            - List all auto-whispers")
         print(" ")
         print("|cFF69CCF0Per-friend sounds:|r")
-        print("  /fa friendsound <name> <num> - Set sound for friend")
-        print("  /fa friendsound-remove <name> - Remove (use global)")
-        print("  /fa friendsounds        - List per-friend sounds")
+        print("  /bf friendsound <name> <num> - Set sound for friend")
+        print("  /bf friendsound-remove <name> - Remove (use global)")
+        print("  /bf friendsounds        - List per-friend sounds")
         print(" ")
         print("  |cFF888888Put .tga/.blp files in: AddOns/BuddyFlash/Avatars/|r")
         print("  |cFF888888Right-click a friend for: Invite, Inspect, Whisper, Target|r")

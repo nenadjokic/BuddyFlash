@@ -371,7 +371,7 @@ y1 = y1 - 30
 local soundLabel = t1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 soundLabel:SetPoint("TOPLEFT", t1, "TOPLEFT", 20, y1)
 soundLabel:SetText("Notification Sound:")
-y1 = y1 - 5
+y1 = y1 - 22
 
 local soundDropdown = CreateFrame("Frame", "BuddyFlashSoundDropdown", t1, "UIDropDownMenuTemplate")
 soundDropdown:SetPoint("TOPLEFT", t1, "TOPLEFT", 5, y1)
@@ -495,7 +495,7 @@ UIDropDownMenu_Initialize(fcAvatarDropdown, FCAvatarDropdown_Init)
 
 local fcAssignAvatarBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
 fcAssignAvatarBtn:SetSize(80, 24)
-fcAssignAvatarBtn:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 260, fcY - 2)
+fcAssignAvatarBtn:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 240, fcY - 2)
 fcAssignAvatarBtn:SetText("Assign")
 fcAssignAvatarBtn:SetScript("OnClick", function()
     local db = ns.GetDB()
@@ -680,7 +680,7 @@ local t2 = tabPanels[2].child
 local y2 = -10
 
 CreateSectionHeader(t2, "Online Friends", 10, y2)
-y2 = y2 - 10
+y2 = y2 - 26
 
 local friendsInfo = t2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 friendsInfo:SetPoint("TOPLEFT", t2, "TOPLEFT", 20, y2)
@@ -807,7 +807,7 @@ local t3 = tabPanels[3].child
 local y3 = -10
 
 CreateSectionHeader(t3, "Assign Avatar", 10, y3)
-y3 = y3 - 10
+y3 = y3 - 26
 
 local avInfoText = t3:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 avInfoText:SetPoint("TOPLEFT", t3, "TOPLEFT", 20, y3)
@@ -1035,7 +1035,7 @@ local t4 = tabPanels[4].child
 local y4 = -10
 
 CreateSectionHeader(t4, "Per-Friend Login Sounds", 10, y4)
-y4 = y4 - 10
+y4 = y4 - 26
 
 local fsInfo = t4:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 fsInfo:SetPoint("TOPLEFT", t4, "TOPLEFT", 20, y4)
@@ -1401,7 +1401,7 @@ y5 = y5 - 150
 
 -- Known Alts
 CreateSectionHeader(t5, "Known Characters (Alts)", 10, y5)
-y5 = y5 - 10
+y5 = y5 - 26
 
 local altsInfo = t5:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 altsInfo:SetPoint("TOPLEFT", t5, "TOPLEFT", 20, y5)
@@ -1486,7 +1486,7 @@ local function RefreshAltsList()
     end
 end
 
-local clearAltsBtn = CreateButton(t5, "Clear Alts", 370, y5 + 7, 100, 22, function()
+local clearAltsBtn = CreateButton(t5, "Clear Alts", 370, y5 + 22, 100, 22, function()
     ns.GetDB().knownAlts = {}
     RefreshAltsList()
 end)
