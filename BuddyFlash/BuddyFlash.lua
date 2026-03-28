@@ -3,30 +3,35 @@
 
 local addonName, ns = ...
 
+local BUDDYFLASH_VERSION = "1.0.4"
+ns.VERSION = BUDDYFLASH_VERSION
+ns.SUPPORT_PAYPAL = "paypal.me/nenadjokicRS"
+ns.SUPPORT_COFFEE = "buymeacoffee.com/nenadjokic"
+
 -- Saved settings (persisted between sessions)
 BuddyFlashDB = BuddyFlashDB or {}
 
--- Available login sounds
+-- Available login sounds (verified via wowhead.com/sounds)
 local SOUND_OPTIONS = {
-    { id = 3332,  name = "Friend Login (Default)" },
-    { id = 8959,  name = "Raid Warning" },
-    { id = 8460,  name = "Ready Check" },
-    { id = 11466, name = "Murloc Aggro" },
-    { id = 6674,  name = "PvP Flag Taken" },
-    { id = 12867, name = "Level Up" },
-    { id = 8213,  name = "Loot Legendary" },
-    { id = 5274,  name = "Quest Complete" },
-    { id = 3337,  name = "Tell Message" },
-    { id = 7355,  name = "Map Ping" },
+    { id = 3332,  name = "Friend Login (Default)" },    -- FriendJoinGame
+    { id = 11466, name = "You Are Not Prepared!" },      -- Illidan voice line
+    { id = 888,   name = "Level Up" },                   -- LEVELUP (the classic "ding!")
+    { id = 8960,  name = "Ready Check" },                -- ReadyCheck
+    { id = 8959,  name = "Raid Warning" },               -- RaidWarning
+    { id = 619,   name = "Quest Complete" },              -- QUESTCOMPLETED
+    { id = 416,   name = "Murloc Aggro" },               -- MurlocAggro (mrrglglgl!)
+    { id = 8174,  name = "PvP Flag Taken" },             -- PVPFlagTakenAlliance
+    { id = 8454,  name = "PvP Victory" },                -- PVPVictoryHorde
+    { id = 8458,  name = "PvP Queue Pop" },              -- PVPEnterQueue
+    { id = 4574,  name = "PvP Warning" },                -- igPVPUpdate (PVPWARNING)
+    { id = 6199,  name = "Peon: Work Complete" },        -- PeonBuildingComplete1
 }
 
--- Custom sounds: BuddyFlash/Sounds/sound0.ogg through sound9.ogg
--- WoW supports .ogg format for custom sounds via PlaySoundFile
+-- Custom sounds: place .ogg files in BuddyFlash/Sounds/
+-- Files must be named custom1.ogg through custom5.ogg
 local CUSTOM_SOUND_PATH = "Interface\\AddOns\\BuddyFlash\\Sounds\\"
-for i = 0, 9 do
-    local path = CUSTOM_SOUND_PATH .. "sound" .. i .. ".ogg"
-    -- Check if file exists by trying to read it (will silently fail if missing)
-    table.insert(SOUND_OPTIONS, { file = path, name = "Custom Sound " .. i })
+for i = 1, 5 do
+    table.insert(SOUND_OPTIONS, { file = CUSTOM_SOUND_PATH .. "custom" .. i .. ".ogg", name = "Custom Voice " .. i })
 end
 
 -- Avatar system paths
@@ -530,7 +535,9 @@ local function GetRow(index)
 
             -- Last seen (show for currently online friends too - their previous offline time)
             if fd.key and db.lastSeen[fd.key] then
-                local elapsed = time() - db.lastSeen[fd.key]
+                local lsData = db.lastSeen[fd.key]
+                local lsTime = type(lsData) == "table" and lsData.time or lsData
+                local elapsed = time() - lsTime
                 local timeStr
                 if elapsed < 60 then timeStr = elapsed .. "s ago"
                 elseif elapsed < 3600 then timeStr = math.floor(elapsed / 60) .. "m ago"
@@ -794,6 +801,8 @@ local function UpdateListUI()
                 table.insert(db.loginHistory, 1, {
                     key = friend.key,
                     name = friend.name,
+                    charName = friend.charName,
+                    bnetTag = friend.bnetTag,
                     time = time(),
                     isLogin = true,
                 })
@@ -841,13 +850,15 @@ local function UpdateListUI()
             if isTracked then
                 ShowBanner(logoutName, false, logoutChar, logoutBnet)
 
-                -- Save last seen timestamp
-                db.lastSeen[key] = time()
+                -- Save last seen data
+                db.lastSeen[key] = { time = time(), name = logoutName, charName = logoutChar, bnetTag = logoutBnet }
 
                 -- Logout history
                 table.insert(db.loginHistory, 1, {
                     key = key,
                     name = logoutName,
+                    charName = logoutChar,
+                    bnetTag = logoutBnet,
                     time = time(),
                     isLogin = false,
                 })
@@ -895,12 +906,60 @@ local function UpdateListUI()
     end
 end
 
+-- Collect ALL Battle.net friends (online + offline) for Settings Friends tab
+local function CollectAllBNetFriends()
+    local all = {}
+    local numBNet = BNGetNumFriends()
+    for i = 1, numBNet do
+        local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
+        if accountInfo then
+            local bnetTag = accountInfo.accountName or "?"
+            local isOnline = false
+            local charName = nil
+            local classFile = nil
+            local isAFK = accountInfo.isAFK or false
+            local isDND = accountInfo.isDND or false
+            local isInWoW = false
+
+            if accountInfo.gameAccountInfo then
+                local gameInfo = accountInfo.gameAccountInfo
+                isOnline = gameInfo.isOnline or false
+                if gameInfo.isGameAFK then isAFK = true end
+                if gameInfo.isGameBusy then isDND = true end
+                if isOnline and gameInfo.clientProgram == "WoW" then
+                    charName = gameInfo.characterName
+                    classFile = gameInfo.classFile
+                    isInWoW = true
+                end
+            end
+
+            table.insert(all, {
+                bnetTag = bnetTag,
+                charName = charName,
+                classFile = classFile,
+                isOnline = isOnline,
+                isAFK = isAFK,
+                isDND = isDND,
+                isInWoW = isInWoW,
+                bnetAccountID = accountInfo.bnetAccountID,
+                bnetIndex = i,
+            })
+        end
+    end
+    table.sort(all, function(a, b)
+        if a.isOnline ~= b.isOnline then return a.isOnline end
+        return a.bnetTag < b.bnetTag
+    end)
+    return all
+end
+
 -- Expose more functions to namespace
 ns.UpdateListUI = UpdateListUI
 ns.DoFlash = DoFlash
 ns.ShowBanner = ShowBanner
 ns.ApplyBannerLayout = ApplyBannerLayout
 ns.CollectOnlineFriends = CollectOnlineFriends
+ns.CollectAllBNetFriends = CollectAllBNetFriends
 
 -- ============================================================
 -- EVENT HANDLING
@@ -937,6 +996,22 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             listFrame:SetPoint(p[1], UIParent, p[3], p[4], p[5])
         end
         listFrame:SetSize(db.windowWidth, db.windowHeight)
+
+        -- Welcome / update popup
+        local isFirstRun = not db.lastSeenVersion
+        local isUpdate = db.lastSeenVersion and db.lastSeenVersion ~= BUDDYFLASH_VERSION
+        if isFirstRun or isUpdate then
+            db.lastSeenVersion = BUDDYFLASH_VERSION
+            C_Timer.After(5, function()
+                if ns.ShowWelcomePopup then
+                    ns.ShowWelcomePopup(isFirstRun)
+                end
+            end)
+        end
+
+        -- Chat message on login
+        print("|cFF69CCF0BuddyFlash v" .. BUDDYFLASH_VERSION .. "|r loaded! Type |cFFFFFF00/bf|r for commands.")
+        print("  |cFF888888Support development: /bf support|r")
 
         -- Request friend list data
         C_FriendList.ShowFriends()
@@ -1267,8 +1342,18 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         db.windowHeight = 220
         print("|cFF69CCF0BuddyFlash:|r Window position reset.")
 
+    elseif cmd == "support" then
+        print("|cFF69CCF0BuddyFlash - Support Development:|r")
+        print("  |cFFFFCC00PayPal:|r " .. ns.SUPPORT_PAYPAL)
+        print("  |cFFFFCC00Buy Me a Coffee:|r " .. ns.SUPPORT_COFFEE)
+        print(" ")
+        print("  Thank you for using BuddyFlash! <3")
+
+    elseif cmd == "welcome" then
+        if ns.ShowWelcomePopup then ns.ShowWelcomePopup(false) end
+
     else
-        print("|cFF69CCF0BuddyFlash commands:|r")
+        print("|cFF69CCF0BuddyFlash v" .. BUDDYFLASH_VERSION .. " commands:|r")
         print("  /bf options             - Open settings GUI")
         print("  /bf toggle              - Show/hide friend list")
         print("  /bf flash               - Toggle flash effect")
@@ -1279,6 +1364,7 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         print("  /bf lock                - Lock/unlock window position")
         print("  /bf test                - Test the flash effect")
         print("  /bf reset               - Reset window position")
+        print("  /bf support             - Show support links")
         print(" ")
         print("|cFF69CCF0Avatar commands:|r")
         print("  /bf avatar <name> <img> - Set avatar for character")
@@ -1303,8 +1389,11 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         print("  /bf friendsound-remove <name> - Remove (use global)")
         print("  /bf friendsounds        - List per-friend sounds")
         print(" ")
+        print("|cFF69CCF0Custom sounds:|r")
+        print("  Place .ogg files in: |cFF888888AddOns/BuddyFlash/Sounds/|r")
+        print("  Name them: |cFFFFFF00custom1.ogg|r through |cFFFFFF00custom5.ogg|r")
+        print(" ")
         print("  |cFF888888Put .tga/.blp files in: AddOns/BuddyFlash/Avatars/|r")
         print("  |cFF888888Right-click a friend for: Invite, Inspect, Whisper, Target|r")
-        print("  |cFF888888Hover a friend to see: last seen, alts, whisper, sound|r")
     end
 end

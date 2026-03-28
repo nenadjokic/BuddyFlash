@@ -679,7 +679,7 @@ end
 local t2 = tabPanels[2].child
 local y2 = -10
 
-CreateSectionHeader(t2, "Online Friends", 10, y2)
+CreateSectionHeader(t2, "Battle.net Friends", 10, y2)
 y2 = y2 - 26
 
 local friendsInfo = t2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -718,15 +718,22 @@ local function CreateFriendRow(index)
 
     local bg = row:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(row)
-    bg:SetColorTexture(index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.12 or 0, index % 2 == 0 and 0.4 or 0)
+    row.bg = bg
 
     local hl = row:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(row)
     hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
 
+    -- Online/offline indicator dot
+    local statusDot = row:CreateTexture(nil, "ARTWORK")
+    statusDot:SetSize(10, 10)
+    statusDot:SetPoint("LEFT", row, "LEFT", 6, 0)
+    statusDot:SetTexture("Interface\\COMMON\\Indicator-Green")
+    row.statusDot = statusDot
+
     local avatar = row:CreateTexture(nil, "ARTWORK")
     avatar:SetSize(28, 28)
-    avatar:SetPoint("LEFT", row, "LEFT", 6, 0)
+    avatar:SetPoint("LEFT", statusDot, "RIGHT", 4, 0)
     avatar:SetTexCoord(0, 1, 0, 1)
     row.avatar = avatar
 
@@ -747,18 +754,59 @@ local function CreateFriendRow(index)
 end
 
 local function RefreshFriendList()
-    if not ns.CollectOnlineFriends then return end
-    local onlineFriends = ns.CollectOnlineFriends()
+    if not ns.CollectAllBNetFriends then return end
+    local allFriends = ns.CollectAllBNetFriends()
     local db = ns.GetDB()
 
-    for i, friend in ipairs(onlineFriends) do
+    for i, friend in ipairs(allFriends) do
         local row = friendRows[i] or CreateFriendRow(i)
+
+        -- Alternate row background
+        if i % 2 == 0 then
+            row.bg:SetColorTexture(0.08, 0.08, 0.12, 0.4)
+        else
+            row.bg:SetColorTexture(0, 0, 0, 0)
+        end
+
+        -- Online/offline/AFK/DND indicator
+        if friend.isDND then
+            row.statusDot:SetTexture("Interface\\COMMON\\Indicator-Red")
+        elseif friend.isAFK then
+            row.statusDot:SetTexture("Interface\\COMMON\\Indicator-Yellow")
+        elseif friend.isOnline then
+            row.statusDot:SetTexture("Interface\\COMMON\\Indicator-Green")
+        else
+            row.statusDot:SetTexture("Interface\\COMMON\\Indicator-Gray")
+        end
+
+        -- Avatar
         row.avatar:SetTexture(ns.GetAvatarTexture(friend.charName, friend.bnetTag))
-        row.nameText:SetText(friend.display or friend.name)
+        if friend.isOnline then
+            row.avatar:SetDesaturated(false)
+            row.avatar:SetAlpha(1)
+        else
+            row.avatar:SetDesaturated(true)
+            row.avatar:SetAlpha(0.6)
+        end
+
+        -- Name display
+        local displayName
+        local statusTag = ""
+        if friend.isAFK then statusTag = " |cFFFFCC00[Away]|r"
+        elseif friend.isDND then statusTag = " |cFFFF4444[Busy]|r" end
+
+        if friend.isOnline and friend.charName then
+            displayName = friend.charName .. " |cFF888888(" .. friend.bnetTag .. ")|r" .. statusTag
+        elseif friend.isOnline then
+            displayName = "|cFFFFFFAA" .. friend.bnetTag .. "|r" .. statusTag
+        else
+            displayName = "|cFF777777" .. friend.bnetTag .. "|r"
+        end
+        row.nameText:SetText(displayName)
 
         -- Build status badges
         local badges = {}
-        local key = friend.bnetTag or friend.charName
+        local key = friend.bnetTag
         if key then
             if db.avatars[key] or (friend.charName and db.avatars[friend.charName]) then
                 table.insert(badges, "|cFF00FF00av|r")
@@ -770,28 +818,36 @@ local function RefreshFriendList()
                 table.insert(badges, "|cFFFFCC00wsp|r")
             end
         end
-        row.statusText:SetText(#badges > 0 and table.concat(badges, " ") or "|cFF666666click to configure|r")
+        row.statusText:SetText(#badges > 0 and table.concat(badges, " ") or "|cFF666666configure|r")
 
         row:SetScript("OnClick", function()
-            ns.ShowFriendConfig(friend.charName, friend.bnetTag, friend.name)
+            local name = friend.bnetTag
+            if friend.charName then
+                name = friend.bnetTag .. " (" .. friend.charName .. ")"
+            end
+            ns.ShowFriendConfig(friend.charName, friend.bnetTag, name)
         end)
         row:Show()
     end
 
-    for i = #onlineFriends + 1, #friendRows do
+    for i = #allFriends + 1, #friendRows do
         if friendRows[i] then friendRows[i]:Hide() end
     end
 
-    if #onlineFriends == 0 then
+    if #allFriends == 0 then
         local row = friendRows[1] or CreateFriendRow(1)
+        row.statusDot:SetTexture("Interface\\COMMON\\Indicator-Gray")
         row.avatar:SetTexture(ns.DEFAULT_AVATAR)
-        row.nameText:SetText("|cFF666666No friends online|r")
+        row.avatar:SetDesaturated(false)
+        row.avatar:SetAlpha(1)
+        row.bg:SetColorTexture(0, 0, 0, 0)
+        row.nameText:SetText("|cFF666666No Battle.net friends found|r")
         row.statusText:SetText("")
         row:SetScript("OnClick", nil)
         row:Show()
         friendScrollChild:SetHeight(36)
     else
-        friendScrollChild:SetHeight(#onlineFriends * 36)
+        friendScrollChild:SetHeight(#allFriends * 36)
     end
 end
 
@@ -1258,10 +1314,14 @@ histScroll:SetScrollChild(histScrollChild)
 local histRows = {}
 
 local function CreateHistRow(index)
-    local row = CreateFrame("Frame", nil, histScrollChild)
+    local row = CreateFrame("Button", nil, histScrollChild)
     row:SetHeight(20)
     row:SetPoint("TOPLEFT", histScrollChild, "TOPLEFT", 0, -(index - 1) * 20)
     row:SetPoint("RIGHT", histScrollChild, "RIGHT", 0, 0)
+
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
 
     local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     text:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1284,6 +1344,13 @@ local function RefreshHistoryList()
         local arrow = entry.isLogin and "|cFF00FF00+|r" or "|cFFFF3333-|r"
         local action = entry.isLogin and "logged in" or "went offline"
         row.text:SetText(string.format("%s |cFF888888[%s]|r %s %s", arrow, timeStr, entry.name, action))
+        if entry.bnetTag or entry.charName then
+            row:SetScript("OnClick", function()
+                ns.ShowFriendConfig(entry.charName, entry.bnetTag, entry.name)
+            end)
+        else
+            row:SetScript("OnClick", nil)
+        end
         row:Show()
     end
 
@@ -1294,6 +1361,7 @@ local function RefreshHistoryList()
     if #db.loginHistory == 0 then
         local row = histRows[1] or CreateHistRow(1)
         row.text:SetText("|cFF666666No history yet.|r")
+        row:SetScript("OnClick", nil)
         row:Show()
         histScrollChild:SetHeight(20)
     else
@@ -1335,10 +1403,14 @@ lsScroll:SetScrollChild(lsScrollChild)
 local lsRows = {}
 
 local function CreateLSRow(index)
-    local row = CreateFrame("Frame", nil, lsScrollChild)
+    local row = CreateFrame("Button", nil, lsScrollChild)
     row:SetHeight(22)
     row:SetPoint("TOPLEFT", lsScrollChild, "TOPLEFT", 0, -(index - 1) * 22)
     row:SetPoint("RIGHT", lsScrollChild, "RIGHT", 0, 0)
+
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
 
     local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameText:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1359,14 +1431,18 @@ end
 local function RefreshLastSeenList()
     local db = ns.GetDB()
     local entries = {}
-    for key, ts in pairs(db.lastSeen) do
-        table.insert(entries, { key = key, time = ts })
+    for key, data in pairs(db.lastSeen) do
+        local ts = type(data) == "table" and data.time or data
+        local name = type(data) == "table" and data.name or key
+        local charName = type(data) == "table" and data.charName or nil
+        local bnetTag = type(data) == "table" and data.bnetTag or nil
+        table.insert(entries, { key = key, time = ts, name = name, charName = charName, bnetTag = bnetTag })
     end
     table.sort(entries, function(a, b) return a.time > b.time end)
 
     for i, entry in ipairs(entries) do
         local row = lsRows[i] or CreateLSRow(i)
-        row.nameText:SetText("|cFFFFFF00" .. entry.key .. "|r")
+        row.nameText:SetText("|cFFFFFF00" .. entry.name .. "|r")
         local elapsed = time() - entry.time
         local agoStr
         if elapsed < 60 then agoStr = elapsed .. "s ago"
@@ -1374,6 +1450,9 @@ local function RefreshLastSeenList()
         elseif elapsed < 86400 then agoStr = math.floor(elapsed / 3600) .. "h ago"
         else agoStr = math.floor(elapsed / 86400) .. "d ago" end
         row.timeText:SetText(agoStr .. "  (" .. date("%m/%d %H:%M", entry.time) .. ")")
+        row:SetScript("OnClick", function()
+            ns.ShowFriendConfig(entry.charName, entry.bnetTag, entry.name)
+        end)
         row:Show()
     end
 
@@ -1385,6 +1464,7 @@ local function RefreshLastSeenList()
         local row = lsRows[1] or CreateLSRow(1)
         row.nameText:SetText("|cFF666666No last seen data yet|r")
         row.timeText:SetText("")
+        row:SetScript("OnClick", nil)
         row:Show()
         lsScrollChild:SetHeight(22)
     else
@@ -1432,10 +1512,18 @@ altsScroll:SetScrollChild(altsScrollChild)
 local altsRows = {}
 
 local function CreateAltsRow(index)
-    local row = CreateFrame("Frame", nil, altsScrollChild)
+    local row = CreateFrame("Button", nil, altsScrollChild)
     row:SetHeight(24)
     row:SetPoint("TOPLEFT", altsScrollChild, "TOPLEFT", 0, -(index - 1) * 24)
     row:SetPoint("RIGHT", altsScrollChild, "RIGHT", 0, 0)
+
+    local bg = row:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(row)
+    bg:SetColorTexture(index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.12 or 0, index % 2 == 0 and 0.4 or 0)
+
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
 
     local tagText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     tagText:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1468,6 +1556,9 @@ local function RefreshAltsList()
         local row = altsRows[i] or CreateAltsRow(i)
         row.tagText:SetText("|cFFFFFF00" .. entry.tag .. "|r")
         row.charsText:SetText(table.concat(entry.alts, ", "))
+        row:SetScript("OnClick", function()
+            ns.ShowFriendConfig(entry.alts[1], entry.tag, entry.tag)
+        end)
         row:Show()
     end
 
@@ -1479,6 +1570,7 @@ local function RefreshAltsList()
         local row = altsRows[1] or CreateAltsRow(1)
         row.tagText:SetText("|cFF666666No alt data yet|r")
         row.charsText:SetText("Play more to discover")
+        row:SetScript("OnClick", nil)
         row:Show()
         altsScrollChild:SetHeight(24)
     else
@@ -1520,4 +1612,141 @@ ns.ToggleOptions = function()
     else
         optionsFrame:Show()
     end
+end
+
+-- ============================================================
+-- WELCOME / UPDATE POPUP
+-- ============================================================
+
+local welcomeFrame = CreateFrame("Frame", "BuddyFlashWelcome", UIParent, "BackdropTemplate")
+welcomeFrame:SetSize(460, 420)
+welcomeFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
+welcomeFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+welcomeFrame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+})
+welcomeFrame:SetBackdropColor(0.05, 0.08, 0.15, 0.98)
+welcomeFrame:SetBackdropBorderColor(0.4, 0.6, 1.0, 0.9)
+welcomeFrame:SetMovable(true)
+welcomeFrame:EnableMouse(true)
+welcomeFrame:RegisterForDrag("LeftButton")
+welcomeFrame:SetScript("OnDragStart", welcomeFrame.StartMoving)
+welcomeFrame:SetScript("OnDragStop", welcomeFrame.StopMovingOrSizing)
+welcomeFrame:SetClampedToScreen(true)
+welcomeFrame:Hide()
+
+tinsert(UISpecialFrames, "BuddyFlashWelcome")
+
+local wTitleBg = welcomeFrame:CreateTexture(nil, "ARTWORK")
+wTitleBg:SetHeight(28)
+wTitleBg:SetPoint("TOPLEFT", welcomeFrame, "TOPLEFT", 4, -4)
+wTitleBg:SetPoint("TOPRIGHT", welcomeFrame, "TOPRIGHT", -4, -4)
+wTitleBg:SetColorTexture(0.1, 0.2, 0.4, 0.7)
+
+local wTitle = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+wTitle:SetPoint("TOP", welcomeFrame, "TOP", 0, -9)
+
+local wCloseBtn = CreateFrame("Button", nil, welcomeFrame, "UIPanelCloseButton")
+wCloseBtn:SetPoint("TOPRIGHT", welcomeFrame, "TOPRIGHT", -2, -2)
+
+local wBody = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+wBody:SetPoint("TOPLEFT", welcomeFrame, "TOPLEFT", 20, -42)
+wBody:SetPoint("RIGHT", welcomeFrame, "RIGHT", -20, 0)
+wBody:SetJustifyH("LEFT")
+wBody:SetSpacing(3)
+
+-- Support section - anchored BELOW body text
+local wSupportHeader = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+wSupportHeader:SetPoint("TOPLEFT", wBody, "BOTTOMLEFT", 0, -16)
+wSupportHeader:SetText("|cFF69CCF0Support Development|r")
+
+local wSupportLine = welcomeFrame:CreateTexture(nil, "ARTWORK")
+wSupportLine:SetHeight(1)
+wSupportLine:SetPoint("TOPLEFT", wSupportHeader, "BOTTOMLEFT", 0, -4)
+wSupportLine:SetPoint("RIGHT", welcomeFrame, "RIGHT", -20, 0)
+wSupportLine:SetColorTexture(0.3, 0.5, 0.7, 0.5)
+
+local wSupportText = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+wSupportText:SetPoint("TOPLEFT", wSupportLine, "BOTTOMLEFT", 0, -8)
+wSupportText:SetPoint("RIGHT", welcomeFrame, "RIGHT", -20, 0)
+wSupportText:SetJustifyH("LEFT")
+wSupportText:SetTextColor(0.8, 0.8, 0.8)
+wSupportText:SetText("If you enjoy BuddyFlash, consider supporting development!\nCopy a link below and paste it in your browser:")
+
+-- Copyable URL boxes
+local wCoffeeLabel = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+wCoffeeLabel:SetPoint("TOPLEFT", wSupportText, "BOTTOMLEFT", 0, -10)
+wCoffeeLabel:SetTextColor(1, 0.82, 0)
+wCoffeeLabel:SetText("Buy Me a Coffee:")
+
+local wCoffeeBox = CreateFrame("EditBox", "BuddyFlashCoffeeURL", welcomeFrame, "InputBoxTemplate")
+wCoffeeBox:SetPoint("LEFT", wCoffeeLabel, "RIGHT", 8, 0)
+wCoffeeBox:SetSize(260, 20)
+wCoffeeBox:SetAutoFocus(false)
+wCoffeeBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+wCoffeeBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+
+local wPaypalLabel = welcomeFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+wPaypalLabel:SetPoint("TOPLEFT", wCoffeeLabel, "BOTTOMLEFT", 0, -10)
+wPaypalLabel:SetTextColor(0.4, 0.7, 1)
+wPaypalLabel:SetText("PayPal:")
+
+local wPaypalBox = CreateFrame("EditBox", "BuddyFlashPaypalURL", welcomeFrame, "InputBoxTemplate")
+wPaypalBox:SetPoint("LEFT", wPaypalLabel, "RIGHT", 8, 0)
+wPaypalBox:SetPoint("RIGHT", wCoffeeBox, "RIGHT", 0, 0)
+wPaypalBox:SetHeight(20)
+wPaypalBox:SetAutoFocus(false)
+wPaypalBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+wPaypalBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+
+-- Buttons
+local wSettingsBtn = CreateFrame("Button", nil, welcomeFrame, "UIPanelButtonTemplate")
+wSettingsBtn:SetSize(130, 26)
+wSettingsBtn:SetPoint("BOTTOMLEFT", welcomeFrame, "BOTTOMLEFT", 20, 15)
+wSettingsBtn:SetText("Open Settings")
+wSettingsBtn:SetScript("OnClick", function()
+    welcomeFrame:Hide()
+    if ns.ToggleOptions then ns.ToggleOptions() end
+end)
+
+local wDismissBtn = CreateFrame("Button", nil, welcomeFrame, "UIPanelButtonTemplate")
+wDismissBtn:SetSize(100, 26)
+wDismissBtn:SetPoint("BOTTOMRIGHT", welcomeFrame, "BOTTOMRIGHT", -20, 15)
+wDismissBtn:SetText("Got it!")
+wDismissBtn:SetScript("OnClick", function() welcomeFrame:Hide() end)
+
+ns.ShowWelcomePopup = function(isFirstRun)
+    if isFirstRun then
+        wTitle:SetText("|cFF69CCF0BuddyFlash|r - Welcome!")
+        wBody:SetText(
+            "|cFFFFFFFFThank you for installing BuddyFlash!|r\n\n" ..
+            "  |cFF00FF00*|r Screen flash & sound when friends log in\n" ..
+            "  |cFF00FF00*|r Custom avatars & per-friend sounds\n" ..
+            "  |cFF00FF00*|r Auto-whisper on friend login\n" ..
+            "  |cFF00FF00*|r Login history & friend tracking\n\n" ..
+            "Type |cFFFFFF00/bf options|r to open settings.\n" ..
+            "Type |cFFFFFF00/bf|r for all commands.\n\n" ..
+            "|cFF888888Custom sounds: place custom1.ogg - custom5.ogg|r\n" ..
+            "|cFF888888in Interface/AddOns/BuddyFlash/Sounds/|r"
+        )
+    else
+        wTitle:SetText("|cFF69CCF0BuddyFlash|r v" .. (ns.VERSION or "?") .. " - Updated!")
+        wBody:SetText(
+            "|cFFFFFFFFWhat's new:|r\n\n" ..
+            "  |cFF00FF00*|r Friends tab: ALL Battle.net friends (online + offline)\n" ..
+            "  |cFF00FF00*|r AFK/DND status indicators\n" ..
+            "  |cFF00FF00*|r Sound names fixed (verified via Wowhead)\n" ..
+            "  |cFF00FF00*|r Clickable history & alts entries\n" ..
+            "  |cFF00FF00*|r Custom Voice 1-5 sound slots\n" ..
+            "  |cFF00FF00*|r UI spacing & overflow fixes\n\n" ..
+            "|cFF888888Custom sounds: place custom1.ogg - custom5.ogg|r\n" ..
+            "|cFF888888in Interface/AddOns/BuddyFlash/Sounds/|r"
+        )
+    end
+    wCoffeeBox:SetText(ns.SUPPORT_COFFEE or "")
+    wPaypalBox:SetText(ns.SUPPORT_PAYPAL or "")
+    welcomeFrame:Show()
 end
