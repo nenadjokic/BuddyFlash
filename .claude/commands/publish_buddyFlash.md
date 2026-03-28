@@ -1,5 +1,5 @@
 ---
-name: publish_buddy
+name: publish_buddyFlash
 description: Full BuddyFlash release - git, GitHub, CurseForge
 user-invocable: true
 ---

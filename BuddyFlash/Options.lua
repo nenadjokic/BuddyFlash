@@ -1,5 +1,5 @@
--- BuddyFlash Options GUI
--- ======================
+-- BuddyFlash Options GUI (Tab-based)
+-- ====================================
 
 local addonName, ns = ...
 
@@ -84,18 +84,18 @@ local function GetAvailableAvatars()
             table.insert(avatars, name)
         end
     end
-    -- Always ensure "default" is present
     local hasDefault = false
     for _, name in ipairs(avatars) do
-        if name == "default" then
-            hasDefault = true
-            break
-        end
+        if name == "default" then hasDefault = true; break end
     end
-    if not hasDefault then
-        table.insert(avatars, 1, "default")
-    end
+    if not hasDefault then table.insert(avatars, 1, "default") end
     return avatars
+end
+
+-- Helper: format character name
+local function FormatName(text)
+    if text:find("#") then return text end
+    return text:sub(1,1):upper() .. text:sub(2):lower()
 end
 
 -- ============================================================
@@ -103,7 +103,7 @@ end
 -- ============================================================
 
 local optionsFrame = CreateFrame("Frame", "BuddyFlashOptionsFrame", UIParent, "BackdropTemplate")
-optionsFrame:SetSize(520, 650)
+optionsFrame:SetSize(540, 680)
 optionsFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 optionsFrame:SetFrameStrata("DIALOG")
 optionsFrame:SetBackdrop({
@@ -122,7 +122,6 @@ optionsFrame:SetScript("OnDragStop", optionsFrame.StopMovingOrSizing)
 optionsFrame:SetClampedToScreen(true)
 optionsFrame:Hide()
 
--- Close on Escape
 tinsert(UISpecialFrames, "BuddyFlashOptionsFrame")
 
 -- Title
@@ -136,147 +135,200 @@ local titleText = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalL
 titleText:SetPoint("TOP", optionsFrame, "TOP", 0, -10)
 titleText:SetText("|cFF69CCF0BuddyFlash|r Settings")
 
--- Close button
 local closeBtn = CreateFrame("Button", nil, optionsFrame, "UIPanelCloseButton")
 closeBtn:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -2, -2)
 
 -- ============================================================
--- CONTENT SCROLL FRAME
+-- TAB SYSTEM
 -- ============================================================
 
-local contentScroll = CreateFrame("ScrollFrame", "BuddyFlashOptionsScroll", optionsFrame, "UIPanelScrollFrameTemplate")
-contentScroll:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 10, -40)
-contentScroll:SetPoint("BOTTOMRIGHT", optionsFrame, "BOTTOMRIGHT", -30, 10)
+local TAB_NAMES = { "General", "Friends", "Avatars", "Sounds", "History" }
+local tabButtons = {}
+local tabPanels = {}
+local activeTab = 1
 
-local content = CreateFrame("Frame", nil, contentScroll)
-content:SetSize(460, 2400)
-contentScroll:SetScrollChild(content)
+local function SelectTab(index)
+    activeTab = index
+    for i, btn in ipairs(tabButtons) do
+        if i == index then
+            btn:SetNormalFontObject("GameFontHighlight")
+            btn:GetFontString():SetTextColor(1, 1, 1)
+            btn.bg:SetColorTexture(0.15, 0.3, 0.5, 0.8)
+        else
+            btn:SetNormalFontObject("GameFontNormal")
+            btn:GetFontString():SetTextColor(0.6, 0.6, 0.6)
+            btn.bg:SetColorTexture(0.1, 0.1, 0.15, 0.6)
+        end
+    end
+    for i, panel in ipairs(tabPanels) do
+        if i == index then panel.scroll:Show() else panel.scroll:Hide() end
+    end
+    -- Trigger refresh for visible tab
+    if tabPanels[index] and tabPanels[index].refresh then
+        tabPanels[index].refresh()
+    end
+end
+
+for i, name in ipairs(TAB_NAMES) do
+    local tab = CreateFrame("Button", "BuddyFlashTab" .. i, optionsFrame)
+    tab:SetSize(96, 24)
+    tab:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 10 + (i - 1) * 100, -38)
+
+    local bg = tab:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(tab)
+    bg:SetColorTexture(0.1, 0.1, 0.15, 0.6)
+    tab.bg = bg
+
+    local text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetPoint("CENTER", tab, "CENTER", 0, 0)
+    text:SetText(name)
+    tab:SetFontString(text)
+
+    local hl = tab:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(tab)
+    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
+
+    tab:SetScript("OnClick", function() SelectTab(i) end)
+    tabButtons[i] = tab
+
+    -- Create scroll panel for this tab
+    local scroll = CreateFrame("ScrollFrame", "BuddyFlashTabScroll" .. i, optionsFrame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 10, -66)
+    scroll:SetPoint("BOTTOMRIGHT", optionsFrame, "BOTTOMRIGHT", -30, 10)
+    scroll:Hide()
+
+    local child = CreateFrame("Frame", nil, scroll)
+    child:SetWidth(480)
+    child:SetHeight(1) -- will be set after content is built
+    scroll:SetScrollChild(child)
+
+    tabPanels[i] = { scroll = scroll, child = child }
+end
 
 -- ============================================================
--- SECTION 1: GENERAL SETTINGS
+-- TAB 1: GENERAL SETTINGS
 -- ============================================================
 
-local yOffset = -10
-CreateSectionHeader(content, "General Settings", 10, yOffset)
-yOffset = yOffset - 30
+local t1 = tabPanels[1].child
+local y1 = -10
 
-local cbFlash = CreateCheckbox(content, "Enable Screen Flash", 20, yOffset,
+CreateSectionHeader(t1, "Notifications", 10, y1)
+y1 = y1 - 30
+
+local cbFlash = CreateCheckbox(t1, "Enable Screen Flash", 20, y1,
     function() return ns.GetDB().flashEnabled end,
     function(v) ns.GetDB().flashEnabled = v end
 )
-yOffset = yOffset - 30
+y1 = y1 - 30
 
-local cbSound = CreateCheckbox(content, "Enable Login Sound", 20, yOffset,
+local cbSound = CreateCheckbox(t1, "Enable Login Sound", 20, y1,
     function() return ns.GetDB().soundEnabled end,
     function(v) ns.GetDB().soundEnabled = v end
 )
-yOffset = yOffset - 30
+y1 = y1 - 30
 
-local cbLock = CreateCheckbox(content, "Lock Window Position", 20, yOffset,
+local cbLock = CreateCheckbox(t1, "Lock Window Position", 20, y1,
     function() return ns.GetDB().windowLocked end,
     function(v) ns.GetDB().windowLocked = v end
 )
-yOffset = yOffset - 30
+y1 = y1 - 30
 
-local cbCharFriends = CreateCheckbox(content, "Show Character Friends", 20, yOffset,
+local cbCharFriends = CreateCheckbox(t1, "Show Character Friends", 20, y1,
     function() return ns.GetDB().showCharFriends end,
     function(v) ns.GetDB().showCharFriends = v; if ns.UpdateListUI then ns.UpdateListUI() end end
 )
-yOffset = yOffset - 30
+y1 = y1 - 30
 
-local cbBNetFriends = CreateCheckbox(content, "Show Battle.net Friends", 20, yOffset,
+local cbBNetFriends = CreateCheckbox(t1, "Show Battle.net Friends", 20, y1,
     function() return ns.GetDB().showBNetFriends end,
     function(v) ns.GetDB().showBNetFriends = v; if ns.UpdateListUI then ns.UpdateListUI() end end
 )
-yOffset = yOffset - 40
+y1 = y1 - 40
 
--- ============================================================
--- SECTION 2: FLASH COLOR
--- ============================================================
+-- Auto-Whisper toggle
+CreateSectionHeader(t1, "Auto-Whisper", 10, y1)
+y1 = y1 - 30
 
-CreateSectionHeader(content, "Flash Color", 10, yOffset)
-yOffset = yOffset - 30
+local cbAutoWhisper = CreateCheckbox(t1, "Enable Auto-Whisper on Friend Login", 20, y1,
+    function() return ns.GetDB().autoWhisperEnabled end,
+    function(v) ns.GetDB().autoWhisperEnabled = v end
+)
+y1 = y1 - 20
 
--- Color preview swatch
-local colorPreview = content:CreateTexture(nil, "ARTWORK")
+local whisperWarning = t1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+whisperWarning:SetPoint("TOPLEFT", t1, "TOPLEFT", 50, y1)
+whisperWarning:SetTextColor(1, 0.4, 0.4)
+whisperWarning:SetText("When enabled, sends a message to friends when they log in.\nConfigure per-friend messages in the Friends tab.")
+whisperWarning:SetJustifyH("LEFT")
+y1 = y1 - 40
+
+-- Flash Color
+CreateSectionHeader(t1, "Flash Color", 10, y1)
+y1 = y1 - 30
+
+local colorPreview = t1:CreateTexture(nil, "ARTWORK")
 colorPreview:SetSize(40, 40)
-colorPreview:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
+colorPreview:SetPoint("TOPLEFT", t1, "TOPLEFT", 20, y1)
 
 local function UpdateColorPreview()
     local db = ns.GetDB()
     colorPreview:SetColorTexture(db.flashColor.r, db.flashColor.g, db.flashColor.b, 1)
 end
 
-local sliderR = CreateSlider(content, "Red", 80, yOffset, 0, 1, 0.05,
+local sliderR = CreateSlider(t1, "Red", 80, y1, 0, 1, 0.05,
     function() return ns.GetDB().flashColor.r end,
     function(v) ns.GetDB().flashColor.r = v; UpdateColorPreview() end
 )
-yOffset = yOffset - 45
+y1 = y1 - 45
 
-local sliderG = CreateSlider(content, "Green", 80, yOffset, 0, 1, 0.05,
+local sliderG = CreateSlider(t1, "Green", 80, y1, 0, 1, 0.05,
     function() return ns.GetDB().flashColor.g end,
     function(v) ns.GetDB().flashColor.g = v; UpdateColorPreview() end
 )
-yOffset = yOffset - 45
+y1 = y1 - 45
 
-local sliderB = CreateSlider(content, "Blue", 80, yOffset, 0, 1, 0.05,
+local sliderB = CreateSlider(t1, "Blue", 80, y1, 0, 1, 0.05,
     function() return ns.GetDB().flashColor.b end,
     function(v) ns.GetDB().flashColor.b = v; UpdateColorPreview() end
 )
-yOffset = yOffset - 20
+y1 = y1 - 20
 
-local testFlashBtn = CreateButton(content, "Test Flash", 20, yOffset, 100, 24, function()
+local testFlashBtn = CreateButton(t1, "Test Flash", 20, y1, 100, 24, function()
     if ns.DoFlash then ns.DoFlash() end
     if ns.ShowBanner then ns.ShowBanner("TestPlayer", true, "TestPlayer") end
 end)
-yOffset = yOffset - 40
+y1 = y1 - 40
 
--- ============================================================
--- SECTION 2.5: BANNER SETTINGS (avatar size & position)
--- ============================================================
+-- Banner Settings
+CreateSectionHeader(t1, "Banner Notification", 10, y1)
+y1 = y1 - 30
 
-CreateSectionHeader(content, "Banner Notification", 10, yOffset)
-yOffset = yOffset - 30
-
--- Avatar size slider
-local sliderAvatarSize = CreateSlider(content, "Avatar Size", 80, yOffset, 24, 512, 4,
+local sliderAvatarSize = CreateSlider(t1, "Avatar Size", 80, y1, 24, 512, 4,
     function() return ns.GetDB().bannerAvatarSize end,
-    function(v)
-        ns.GetDB().bannerAvatarSize = v
-        if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end
-    end
+    function(v) ns.GetDB().bannerAvatarSize = v; if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end end
 )
-yOffset = yOffset - 50
+y1 = y1 - 50
 
--- Banner X position slider
-local sliderBannerX = CreateSlider(content, "Position X", 80, yOffset, -600, 600, 10,
+local sliderBannerX = CreateSlider(t1, "Position X", 80, y1, -600, 600, 10,
     function() return ns.GetDB().bannerPosX end,
-    function(v)
-        ns.GetDB().bannerPosX = v
-        if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end
-    end
+    function(v) ns.GetDB().bannerPosX = v; if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end end
 )
-yOffset = yOffset - 50
+y1 = y1 - 50
 
--- Banner Y position slider
-local sliderBannerY = CreateSlider(content, "Position Y", 80, yOffset, -600, 600, 10,
+local sliderBannerY = CreateSlider(t1, "Position Y", 80, y1, -600, 600, 10,
     function() return ns.GetDB().bannerPosY end,
-    function(v)
-        ns.GetDB().bannerPosY = v
-        if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end
-    end
+    function(v) ns.GetDB().bannerPosY = v; if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end end
 )
-yOffset = yOffset - 30
+y1 = y1 - 30
 
--- Anchor dropdown
-local anchorLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-anchorLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
+local anchorLabel = t1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+anchorLabel:SetPoint("TOPLEFT", t1, "TOPLEFT", 20, y1)
 anchorLabel:SetText("Screen Anchor:")
 
 local ANCHOR_OPTIONS = { "TOP", "TOPLEFT", "TOPRIGHT", "CENTER", "BOTTOM", "BOTTOMLEFT", "BOTTOMRIGHT", "LEFT", "RIGHT" }
 
-local anchorDropdown = CreateFrame("Frame", "BuddyFlashAnchorDropdown", content, "UIDropDownMenuTemplate")
-anchorDropdown:SetPoint("TOPLEFT", content, "TOPLEFT", 120, yOffset + 5)
+local anchorDropdown = CreateFrame("Frame", "BuddyFlashAnchorDropdown", t1, "UIDropDownMenuTemplate")
+anchorDropdown:SetPoint("TOPLEFT", t1, "TOPLEFT", 120, y1 + 5)
 
 local function AnchorDropdown_Initialize(self, level)
     local db = ns.GetDB()
@@ -298,45 +350,31 @@ end
 UIDropDownMenu_SetWidth(anchorDropdown, 120)
 UIDropDownMenu_Initialize(anchorDropdown, AnchorDropdown_Initialize)
 
-yOffset = yOffset - 35
+y1 = y1 - 35
 
--- Test banner button
-local testBannerBtn = CreateButton(content, "Test Banner", 20, yOffset, 120, 24, function()
+local testBannerBtn = CreateButton(t1, "Test Banner", 20, y1, 120, 24, function()
     if ns.ShowBanner then ns.ShowBanner("TestPlayer", true, "TestPlayer") end
 end)
-
--- Reset banner position button
-local resetBannerBtn = CreateButton(content, "Reset Position", 155, yOffset, 120, 24, function()
+local resetBannerBtn = CreateButton(t1, "Reset Position", 155, y1, 120, 24, function()
     local db = ns.GetDB()
-    db.bannerAvatarSize = 48
-    db.bannerPosX = 0
-    db.bannerPosY = -100
-    db.bannerAnchor = "TOP"
-    sliderAvatarSize:Refresh()
-    sliderBannerX:Refresh()
-    sliderBannerY:Refresh()
+    db.bannerAvatarSize = 48; db.bannerPosX = 0; db.bannerPosY = -100; db.bannerAnchor = "TOP"
+    sliderAvatarSize:Refresh(); sliderBannerX:Refresh(); sliderBannerY:Refresh()
     UIDropDownMenu_SetText(anchorDropdown, "TOP")
     if ns.ApplyBannerLayout then ns.ApplyBannerLayout() end
-    print("|cFF69CCF0BuddyFlash:|r Banner reset to defaults.")
 end)
+y1 = y1 - 40
 
-yOffset = yOffset - 40
+-- Login Sound
+CreateSectionHeader(t1, "Login Sound", 10, y1)
+y1 = y1 - 30
 
--- ============================================================
--- SECTION 3: SOUND SETTINGS
--- ============================================================
-
-CreateSectionHeader(content, "Login Sound", 10, yOffset)
-yOffset = yOffset - 30
-
--- Sound dropdown
-local soundLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-soundLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
+local soundLabel = t1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+soundLabel:SetPoint("TOPLEFT", t1, "TOPLEFT", 20, y1)
 soundLabel:SetText("Notification Sound:")
-yOffset = yOffset - 5
+y1 = y1 - 5
 
-local soundDropdown = CreateFrame("Frame", "BuddyFlashSoundDropdown", content, "UIDropDownMenuTemplate")
-soundDropdown:SetPoint("TOPLEFT", content, "TOPLEFT", 5, yOffset)
+local soundDropdown = CreateFrame("Frame", "BuddyFlashSoundDropdown", t1, "UIDropDownMenuTemplate")
+soundDropdown:SetPoint("TOPLEFT", t1, "TOPLEFT", 5, y1)
 
 local function SoundDropdown_Initialize(self, level)
     local db = ns.GetDB()
@@ -357,202 +395,512 @@ end
 UIDropDownMenu_SetWidth(soundDropdown, 200)
 UIDropDownMenu_Initialize(soundDropdown, SoundDropdown_Initialize)
 
-yOffset = yOffset - 35
-
-local testSoundBtn = CreateButton(content, "Preview Sound", 20, yOffset, 120, 24, function()
+y1 = y1 - 35
+local testSoundBtn = CreateButton(t1, "Preview Sound", 20, y1, 120, 24, function()
     local db = ns.GetDB()
     local snd = ns.SOUND_OPTIONS[db.soundChoice] or ns.SOUND_OPTIONS[1]
     ns.PlayAlertSound(snd)
 end)
-yOffset = yOffset - 45
+y1 = y1 - 30
+
+t1:SetHeight(-y1 + 20)
+
+-- Tab 1 refresh
+tabPanels[1].refresh = function()
+    cbFlash:Refresh(); cbSound:Refresh(); cbLock:Refresh()
+    cbCharFriends:Refresh(); cbBNetFriends:Refresh(); cbAutoWhisper:Refresh()
+    sliderR:Refresh(); sliderG:Refresh(); sliderB:Refresh(); UpdateColorPreview()
+    sliderAvatarSize:Refresh(); sliderBannerX:Refresh(); sliderBannerY:Refresh()
+    local db = ns.GetDB()
+    UIDropDownMenu_SetText(anchorDropdown, db.bannerAnchor or "TOP")
+    UIDropDownMenu_SetText(soundDropdown, (ns.SOUND_OPTIONS[db.soundChoice] or ns.SOUND_OPTIONS[1]).name)
+end
 
 -- ============================================================
--- SECTION 4: AVATAR MANAGEMENT
+-- FRIEND CONFIG POPUP (modal, used by Tab 2 and right-click menu)
 -- ============================================================
 
-CreateSectionHeader(content, "Avatar Management", 10, yOffset)
-yOffset = yOffset - 10
+local fcPopup = CreateFrame("Frame", "BuddyFlashFriendConfig", UIParent, "BackdropTemplate")
+fcPopup:SetSize(420, 400)
+fcPopup:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
+fcPopup:SetFrameStrata("FULLSCREEN_DIALOG")
+fcPopup:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+})
+fcPopup:SetBackdropColor(0.05, 0.08, 0.15, 0.98)
+fcPopup:SetBackdropBorderColor(0.4, 0.6, 1.0, 0.9)
+fcPopup:SetMovable(true)
+fcPopup:EnableMouse(true)
+fcPopup:RegisterForDrag("LeftButton")
+fcPopup:SetScript("OnDragStart", fcPopup.StartMoving)
+fcPopup:SetScript("OnDragStop", fcPopup.StopMovingOrSizing)
+fcPopup:SetClampedToScreen(true)
+fcPopup:Hide()
 
-local avatarInfoText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-avatarInfoText:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-avatarInfoText:SetTextColor(0.6, 0.6, 0.6)
-avatarInfoText:SetText("Assign avatars by Character Name or BattleTag.\nBattleTag applies to all characters of that friend.")
-avatarInfoText:SetJustifyH("LEFT")
-yOffset = yOffset - 35
+tinsert(UISpecialFrames, "BuddyFlashFriendConfig")
 
--- Character name input
-local nameLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-nameLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-nameLabel:SetText("Character Name:")
+-- Popup title
+local fcTitleBg = fcPopup:CreateTexture(nil, "ARTWORK")
+fcTitleBg:SetHeight(28)
+fcTitleBg:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 4, -4)
+fcTitleBg:SetPoint("TOPRIGHT", fcPopup, "TOPRIGHT", -4, -4)
+fcTitleBg:SetColorTexture(0.1, 0.2, 0.4, 0.7)
 
-local nameInput = CreateFrame("EditBox", "BuddyFlashNameInput", content, "InputBoxTemplate")
-nameInput:SetPoint("TOPLEFT", content, "TOPLEFT", 130, yOffset)
-nameInput:SetSize(150, 25)
-nameInput:SetAutoFocus(false)
-nameInput:SetMaxLetters(50)
-nameInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-nameInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-yOffset = yOffset - 28
+local fcTitle = fcPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+fcTitle:SetPoint("TOP", fcPopup, "TOP", 0, -9)
+fcTitle:SetText("Configure Friend")
 
--- BattleTag input
-local bnetLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-bnetLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-bnetLabel:SetText("BattleTag:")
+local fcCloseBtn = CreateFrame("Button", nil, fcPopup, "UIPanelCloseButton")
+fcCloseBtn:SetPoint("TOPRIGHT", fcPopup, "TOPRIGHT", -2, -2)
 
-local bnetInput = CreateFrame("EditBox", "BuddyFlashBNetInput", content, "InputBoxTemplate")
-bnetInput:SetPoint("TOPLEFT", content, "TOPLEFT", 130, yOffset)
-bnetInput:SetSize(150, 25)
-bnetInput:SetAutoFocus(false)
-bnetInput:SetMaxLetters(50)
-bnetInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-bnetInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+-- Internal state
+local fcCharName, fcBnetTag = nil, nil
 
--- Hint text
-local orLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-orLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 290, yOffset)
-orLabel:SetTextColor(0.5, 0.5, 0.5)
-orLabel:SetText("(fill one or both)")
+-- == AVATAR SECTION ==
+local fcY = -40
+CreateSectionHeader(fcPopup, "Avatar", 15, fcY)
+fcY = fcY - 28
 
-yOffset = yOffset - 30
+local fcAvatarPreview = fcPopup:CreateTexture(nil, "ARTWORK")
+fcAvatarPreview:SetSize(48, 48)
+fcAvatarPreview:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcAvatarPreview:SetTexCoord(0, 1, 0, 1)
 
--- Avatar dropdown
-local avatarDropdownLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-avatarDropdownLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset + 5)
-avatarDropdownLabel:SetText("Avatar:")
+local fcSelectedAvatar = "default"
 
-local avatarDropdown = CreateFrame("Frame", "BuddyFlashAvatarDropdown", content, "UIDropDownMenuTemplate")
-avatarDropdown:SetPoint("TOPLEFT", content, "TOPLEFT", 205, yOffset)
+local fcAvatarDropdown = CreateFrame("Frame", "BuddyFlashFCAvatar", fcPopup, "UIDropDownMenuTemplate")
+fcAvatarDropdown:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 70, fcY + 15)
 
-local selectedAvatar = "default"
-
-local function AvatarDropdown_Initialize(self, level)
+local function FCAvatarDropdown_Init(self, level)
     local avatars = GetAvailableAvatars()
-    for _, avatarName in ipairs(avatars) do
+    for _, av in ipairs(avatars) do
         local info = UIDropDownMenu_CreateInfo()
-        info.text = avatarName
-        info.value = avatarName
-        info.checked = (avatarName == selectedAvatar)
+        info.text = av
+        info.value = av
+        info.checked = (av == fcSelectedAvatar)
         info.func = function(self)
-            selectedAvatar = self.value
-            UIDropDownMenu_SetText(avatarDropdown, self.value)
-            -- Update preview
-            if avatarPreviewTexture then
-                avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. self.value)
-            end
+            fcSelectedAvatar = self.value
+            UIDropDownMenu_SetText(fcAvatarDropdown, self.value)
+            fcAvatarPreview:SetTexture(ns.AVATAR_PATH .. self.value)
             CloseDropDownMenus()
         end
         UIDropDownMenu_AddButton(info, level)
     end
 end
+UIDropDownMenu_SetWidth(fcAvatarDropdown, 130)
+UIDropDownMenu_Initialize(fcAvatarDropdown, FCAvatarDropdown_Init)
 
-UIDropDownMenu_SetWidth(avatarDropdown, 140)
-UIDropDownMenu_Initialize(avatarDropdown, AvatarDropdown_Initialize)
-UIDropDownMenu_SetText(avatarDropdown, selectedAvatar)
+local fcAssignAvatarBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcAssignAvatarBtn:SetSize(80, 24)
+fcAssignAvatarBtn:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 260, fcY - 2)
+fcAssignAvatarBtn:SetText("Assign")
+fcAssignAvatarBtn:SetScript("OnClick", function()
+    local db = ns.GetDB()
+    local key = fcBnetTag or fcCharName
+    if key then
+        db.avatars[key] = fcSelectedAvatar
+        print("|cFF69CCF0BuddyFlash:|r Avatar set for |cFFFFFF00" .. key .. "|r: " .. fcSelectedAvatar)
+        if ns.UpdateListUI then ns.UpdateListUI() end
+    end
+end)
 
-yOffset = yOffset - 35
+local fcRemoveAvatarBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcRemoveAvatarBtn:SetSize(80, 24)
+fcRemoveAvatarBtn:SetPoint("LEFT", fcAssignAvatarBtn, "RIGHT", 5, 0)
+fcRemoveAvatarBtn:SetText("Remove")
+fcRemoveAvatarBtn:SetScript("OnClick", function()
+    local db = ns.GetDB()
+    if fcCharName and db.avatars[fcCharName] then db.avatars[fcCharName] = nil end
+    if fcBnetTag and db.avatars[fcBnetTag] then db.avatars[fcBnetTag] = nil end
+    print("|cFF69CCF0BuddyFlash:|r Avatar removed.")
+    fcAvatarPreview:SetTexture(ns.DEFAULT_AVATAR)
+    if ns.UpdateListUI then ns.UpdateListUI() end
+end)
 
--- Avatar preview
-local previewLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-previewLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-previewLabel:SetText("Preview:")
+fcY = fcY - 60
 
-avatarPreviewTexture = content:CreateTexture(nil, "ARTWORK")
+-- == SOUND SECTION ==
+CreateSectionHeader(fcPopup, "Login Sound", 15, fcY)
+fcY = fcY - 28
+
+local fcSoundLabel = fcPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+fcSoundLabel:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcSoundLabel:SetTextColor(0.7, 0.7, 0.7)
+fcSoundLabel:SetText("Override global sound for this friend:")
+fcY = fcY - 18
+
+local fcSelectedSound = 1
+local fcSoundDropdown = CreateFrame("Frame", "BuddyFlashFCSound", fcPopup, "UIDropDownMenuTemplate")
+fcSoundDropdown:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 5, fcY + 5)
+
+local function FCSoundDropdown_Init(self, level)
+    for i, snd in ipairs(ns.SOUND_OPTIONS) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = snd.name
+        info.value = i
+        info.checked = (i == fcSelectedSound)
+        info.func = function(self)
+            fcSelectedSound = self.value
+            UIDropDownMenu_SetText(fcSoundDropdown, ns.SOUND_OPTIONS[self.value].name)
+            ns.PlayAlertSound(ns.SOUND_OPTIONS[self.value])
+            CloseDropDownMenus()
+        end
+        UIDropDownMenu_AddButton(info, level)
+    end
+end
+UIDropDownMenu_SetWidth(fcSoundDropdown, 200)
+UIDropDownMenu_Initialize(fcSoundDropdown, FCSoundDropdown_Init)
+
+fcY = fcY - 30
+
+local fcSetSoundBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcSetSoundBtn:SetSize(90, 24)
+fcSetSoundBtn:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcSetSoundBtn:SetText("Set Sound")
+fcSetSoundBtn:SetScript("OnClick", function()
+    local db = ns.GetDB()
+    local key = fcBnetTag or fcCharName
+    if key then
+        db.friendSounds[key] = fcSelectedSound
+        print("|cFF69CCF0BuddyFlash:|r Sound for |cFFFFFF00" .. key .. "|r set to: " .. (ns.SOUND_OPTIONS[fcSelectedSound] or {}).name)
+    end
+end)
+
+local fcRemoveSoundBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcRemoveSoundBtn:SetSize(100, 24)
+fcRemoveSoundBtn:SetPoint("LEFT", fcSetSoundBtn, "RIGHT", 5, 0)
+fcRemoveSoundBtn:SetText("Use Global")
+fcRemoveSoundBtn:SetScript("OnClick", function()
+    local db = ns.GetDB()
+    if fcCharName then db.friendSounds[fcCharName] = nil end
+    if fcBnetTag then db.friendSounds[fcBnetTag] = nil end
+    print("|cFF69CCF0BuddyFlash:|r Custom sound removed (using global).")
+end)
+
+local fcPreviewSoundBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcPreviewSoundBtn:SetSize(80, 24)
+fcPreviewSoundBtn:SetPoint("LEFT", fcRemoveSoundBtn, "RIGHT", 5, 0)
+fcPreviewSoundBtn:SetText("Preview")
+fcPreviewSoundBtn:SetScript("OnClick", function()
+    if ns.SOUND_OPTIONS[fcSelectedSound] then ns.PlayAlertSound(ns.SOUND_OPTIONS[fcSelectedSound]) end
+end)
+
+fcY = fcY - 45
+
+-- == WHISPER SECTION ==
+CreateSectionHeader(fcPopup, "Auto-Whisper", 15, fcY)
+fcY = fcY - 28
+
+local fcWhisperInfo = fcPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+fcWhisperInfo:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcWhisperInfo:SetTextColor(0.7, 0.7, 0.7)
+fcWhisperInfo:SetText("Message sent when this friend logs in (requires global toggle ON):")
+fcY = fcY - 20
+
+local fcWhisperInput = CreateFrame("EditBox", "BuddyFlashFCWhisper", fcPopup, "InputBoxTemplate")
+fcWhisperInput:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcWhisperInput:SetSize(370, 25)
+fcWhisperInput:SetAutoFocus(false)
+fcWhisperInput:SetMaxLetters(200)
+fcWhisperInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+fcWhisperInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+fcY = fcY - 30
+
+local fcSetWhisperBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcSetWhisperBtn:SetSize(110, 24)
+fcSetWhisperBtn:SetPoint("TOPLEFT", fcPopup, "TOPLEFT", 20, fcY)
+fcSetWhisperBtn:SetText("Save Whisper")
+fcSetWhisperBtn:SetScript("OnClick", function()
+    local msg = fcWhisperInput:GetText():trim()
+    if msg == "" then
+        print("|cFF69CCF0BuddyFlash:|r Enter a message!")
+        return
+    end
+    local db = ns.GetDB()
+    local key = fcBnetTag or fcCharName
+    if key then
+        db.autoWhisper[key] = msg
+        print("|cFF69CCF0BuddyFlash:|r Auto-whisper for |cFFFFFF00" .. key .. "|r: \"" .. msg .. "\"")
+    end
+end)
+
+local fcRemoveWhisperBtn = CreateFrame("Button", nil, fcPopup, "UIPanelButtonTemplate")
+fcRemoveWhisperBtn:SetSize(120, 24)
+fcRemoveWhisperBtn:SetPoint("LEFT", fcSetWhisperBtn, "RIGHT", 5, 0)
+fcRemoveWhisperBtn:SetText("Remove Whisper")
+fcRemoveWhisperBtn:SetScript("OnClick", function()
+    local db = ns.GetDB()
+    if fcCharName then db.autoWhisper[fcCharName] = nil end
+    if fcBnetTag then db.autoWhisper[fcBnetTag] = nil end
+    fcWhisperInput:SetText("")
+    print("|cFF69CCF0BuddyFlash:|r Auto-whisper removed.")
+end)
+
+-- Show Friend Config popup
+function ns.ShowFriendConfig(charName, bnetTag, displayName)
+    fcCharName = charName
+    fcBnetTag = bnetTag
+    fcTitle:SetText("Configure: |cFFFFFF00" .. (displayName or charName or bnetTag or "?") .. "|r")
+
+    local db = ns.GetDB()
+    local key = bnetTag or charName
+
+    -- Load avatar
+    local currentAvatar = nil
+    if charName and db.avatars[charName] then currentAvatar = db.avatars[charName] end
+    if bnetTag and db.avatars[bnetTag] then currentAvatar = db.avatars[bnetTag] end
+    fcSelectedAvatar = currentAvatar or "default"
+    UIDropDownMenu_SetText(fcAvatarDropdown, fcSelectedAvatar)
+    fcAvatarPreview:SetTexture(ns.AVATAR_PATH .. fcSelectedAvatar)
+
+    -- Load sound
+    local currentSound = nil
+    if bnetTag and db.friendSounds[bnetTag] then currentSound = db.friendSounds[bnetTag] end
+    if charName and db.friendSounds[charName] then currentSound = db.friendSounds[charName] end
+    fcSelectedSound = currentSound or db.soundChoice or 1
+    UIDropDownMenu_SetText(fcSoundDropdown, (ns.SOUND_OPTIONS[fcSelectedSound] or ns.SOUND_OPTIONS[1]).name)
+
+    -- Load whisper
+    local currentWhisper = nil
+    if bnetTag and db.autoWhisper[bnetTag] then currentWhisper = db.autoWhisper[bnetTag] end
+    if charName and db.autoWhisper[charName] then currentWhisper = db.autoWhisper[charName] end
+    fcWhisperInput:SetText(currentWhisper or "")
+
+    fcPopup:Show()
+end
+
+-- ============================================================
+-- TAB 2: FRIENDS (click-to-configure friend list)
+-- ============================================================
+
+local t2 = tabPanels[2].child
+local y2 = -10
+
+CreateSectionHeader(t2, "Online Friends", 10, y2)
+y2 = y2 - 10
+
+local friendsInfo = t2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+friendsInfo:SetPoint("TOPLEFT", t2, "TOPLEFT", 20, y2)
+friendsInfo:SetTextColor(0.6, 0.6, 0.6)
+friendsInfo:SetText("Click a friend to configure their avatar, sound, and whisper.")
+y2 = y2 - 22
+
+local friendListFrame = CreateFrame("Frame", nil, t2, "BackdropTemplate")
+friendListFrame:SetPoint("TOPLEFT", t2, "TOPLEFT", 10, y2)
+friendListFrame:SetSize(460, 500)
+friendListFrame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+})
+friendListFrame:SetBackdropColor(0, 0, 0, 0.4)
+friendListFrame:SetBackdropBorderColor(0.2, 0.3, 0.5, 0.6)
+
+local friendScroll = CreateFrame("ScrollFrame", "BuddyFlashFriendTabScroll", friendListFrame, "UIPanelScrollFrameTemplate")
+friendScroll:SetPoint("TOPLEFT", friendListFrame, "TOPLEFT", 6, -6)
+friendScroll:SetPoint("BOTTOMRIGHT", friendListFrame, "BOTTOMRIGHT", -24, 6)
+
+local friendScrollChild = CreateFrame("Frame", nil, friendScroll)
+friendScrollChild:SetSize(430, 1)
+friendScroll:SetScrollChild(friendScrollChild)
+
+local friendRows = {}
+
+local function CreateFriendRow(index)
+    local row = CreateFrame("Button", nil, friendScrollChild)
+    row:SetHeight(36)
+    row:SetPoint("TOPLEFT", friendScrollChild, "TOPLEFT", 0, -(index - 1) * 36)
+    row:SetPoint("RIGHT", friendScrollChild, "RIGHT", 0, 0)
+
+    local bg = row:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(row)
+    bg:SetColorTexture(index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.12 or 0, index % 2 == 0 and 0.4 or 0)
+
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
+
+    local avatar = row:CreateTexture(nil, "ARTWORK")
+    avatar:SetSize(28, 28)
+    avatar:SetPoint("LEFT", row, "LEFT", 6, 0)
+    avatar:SetTexCoord(0, 1, 0, 1)
+    row.avatar = avatar
+
+    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    nameText:SetPoint("LEFT", avatar, "RIGHT", 8, 0)
+    nameText:SetWidth(200)
+    nameText:SetJustifyH("LEFT")
+    row.nameText = nameText
+
+    -- Status icons (small text badges)
+    local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    statusText:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    statusText:SetJustifyH("RIGHT")
+    row.statusText = statusText
+
+    friendRows[index] = row
+    return row
+end
+
+local function RefreshFriendList()
+    if not ns.CollectOnlineFriends then return end
+    local onlineFriends = ns.CollectOnlineFriends()
+    local db = ns.GetDB()
+
+    for i, friend in ipairs(onlineFriends) do
+        local row = friendRows[i] or CreateFriendRow(i)
+        row.avatar:SetTexture(ns.GetAvatarTexture(friend.charName, friend.bnetTag))
+        row.nameText:SetText(friend.display or friend.name)
+
+        -- Build status badges
+        local badges = {}
+        local key = friend.bnetTag or friend.charName
+        if key then
+            if db.avatars[key] or (friend.charName and db.avatars[friend.charName]) then
+                table.insert(badges, "|cFF00FF00av|r")
+            end
+            if db.friendSounds[key] or (friend.charName and db.friendSounds[friend.charName]) then
+                table.insert(badges, "|cFF69CCF0snd|r")
+            end
+            if db.autoWhisper[key] or (friend.charName and db.autoWhisper[friend.charName]) then
+                table.insert(badges, "|cFFFFCC00wsp|r")
+            end
+        end
+        row.statusText:SetText(#badges > 0 and table.concat(badges, " ") or "|cFF666666click to configure|r")
+
+        row:SetScript("OnClick", function()
+            ns.ShowFriendConfig(friend.charName, friend.bnetTag, friend.name)
+        end)
+        row:Show()
+    end
+
+    for i = #onlineFriends + 1, #friendRows do
+        if friendRows[i] then friendRows[i]:Hide() end
+    end
+
+    if #onlineFriends == 0 then
+        local row = friendRows[1] or CreateFriendRow(1)
+        row.avatar:SetTexture(ns.DEFAULT_AVATAR)
+        row.nameText:SetText("|cFF666666No friends online|r")
+        row.statusText:SetText("")
+        row:SetScript("OnClick", nil)
+        row:Show()
+        friendScrollChild:SetHeight(36)
+    else
+        friendScrollChild:SetHeight(#onlineFriends * 36)
+    end
+end
+
+y2 = y2 - 510
+t2:SetHeight(-y2 + 20)
+tabPanels[2].refresh = RefreshFriendList
+
+-- ============================================================
+-- TAB 3: AVATARS
+-- ============================================================
+
+local t3 = tabPanels[3].child
+local y3 = -10
+
+CreateSectionHeader(t3, "Assign Avatar", 10, y3)
+y3 = y3 - 10
+
+local avInfoText = t3:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+avInfoText:SetPoint("TOPLEFT", t3, "TOPLEFT", 20, y3)
+avInfoText:SetTextColor(0.6, 0.6, 0.6)
+avInfoText:SetText("Assign avatars by Character Name or BattleTag.\nOr use the Friends tab to click-assign.")
+avInfoText:SetJustifyH("LEFT")
+y3 = y3 - 35
+
+local nameLabel = t3:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+nameLabel:SetPoint("TOPLEFT", t3, "TOPLEFT", 20, y3)
+nameLabel:SetText("Name / BattleTag:")
+
+local nameInput = CreateFrame("EditBox", "BuddyFlashNameInput", t3, "InputBoxTemplate")
+nameInput:SetPoint("TOPLEFT", t3, "TOPLEFT", 140, y3)
+nameInput:SetSize(180, 25)
+nameInput:SetAutoFocus(false)
+nameInput:SetMaxLetters(50)
+nameInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+nameInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+y3 = y3 - 30
+
+local avatarDropdownLabel = t3:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+avatarDropdownLabel:SetPoint("TOPLEFT", t3, "TOPLEFT", 20, y3 + 5)
+avatarDropdownLabel:SetText("Avatar:")
+
+local avatarDropdown = CreateFrame("Frame", "BuddyFlashAvatarDropdown", t3, "UIDropDownMenuTemplate")
+avatarDropdown:SetPoint("TOPLEFT", t3, "TOPLEFT", 205, y3)
+
+local selectedAvatar = "default"
+
+local avatarPreviewTexture = t3:CreateTexture(nil, "ARTWORK")
 avatarPreviewTexture:SetSize(48, 48)
-avatarPreviewTexture:SetPoint("TOPLEFT", content, "TOPLEFT", 80, yOffset + 8)
+avatarPreviewTexture:SetPoint("TOPLEFT", t3, "TOPLEFT", 140, y3 + 8)
 avatarPreviewTexture:SetTexture(ns.DEFAULT_AVATAR)
 avatarPreviewTexture:SetTexCoord(0, 1, 0, 1)
 
--- Helper: format character name (capitalize) but leave BattleTags as-is
-local function FormatName(text)
-    if text:find("#") then
-        return text -- BattleTag, don't change case
+local function AvatarDropdown_Initialize(self, level)
+    local avatars = GetAvailableAvatars()
+    for _, av in ipairs(avatars) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = av
+        info.value = av
+        info.checked = (av == selectedAvatar)
+        info.func = function(self)
+            selectedAvatar = self.value
+            UIDropDownMenu_SetText(avatarDropdown, self.value)
+            avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. self.value)
+            CloseDropDownMenus()
+        end
+        UIDropDownMenu_AddButton(info, level)
     end
-    return text:sub(1,1):upper() .. text:sub(2):lower()
 end
+UIDropDownMenu_SetWidth(avatarDropdown, 130)
+UIDropDownMenu_Initialize(avatarDropdown, AvatarDropdown_Initialize)
+UIDropDownMenu_SetText(avatarDropdown, selectedAvatar)
 
--- Assign button
-local assignBtn = CreateButton(content, "Assign Avatar", 150, yOffset - 5, 130, 28, function()
-    local charName = nameInput:GetText():trim()
-    local bnetTag = bnetInput:GetText():trim()
+y3 = y3 - 35
+
+local assignBtn = CreateButton(t3, "Assign Avatar", 20, y3, 130, 28, function()
+    local name = nameInput:GetText():trim()
+    if name == "" then print("|cFF69CCF0BuddyFlash:|r Enter a name!"); return end
     local db = ns.GetDB()
-    local assigned = false
-
-    if charName ~= "" then
-        charName = FormatName(charName)
-        db.avatars[charName] = selectedAvatar
-        print("|cFF69CCF0BuddyFlash:|r Avatar for |cFFFFFF00" .. charName .. "|r set to |cFF00FF00" .. selectedAvatar .. "|r")
-        assigned = true
-    end
-
-    if bnetTag ~= "" then
-        db.avatars[bnetTag] = selectedAvatar
-        print("|cFF69CCF0BuddyFlash:|r Avatar for BattleTag |cFFFFFF00" .. bnetTag .. "|r set to |cFF00FF00" .. selectedAvatar .. "|r")
-        assigned = true
-    end
-
-    if not assigned then
-        print("|cFF69CCF0BuddyFlash:|r Enter a Character Name or BattleTag!")
-        return
-    end
-
-    nameInput:SetText("")
-    bnetInput:SetText("")
-    nameInput:ClearFocus()
-    bnetInput:ClearFocus()
+    name = FormatName(name)
+    db.avatars[name] = selectedAvatar
+    print("|cFF69CCF0BuddyFlash:|r Avatar for |cFFFFFF00" .. name .. "|r set to |cFF00FF00" .. selectedAvatar .. "|r")
+    nameInput:SetText(""); nameInput:ClearFocus()
     if ns.UpdateListUI then ns.UpdateListUI() end
     RefreshAssignmentList()
 end)
 
--- Remove button
-local removeBtn = CreateButton(content, "Remove Avatar", 290, yOffset - 5, 130, 28, function()
-    local charName = nameInput:GetText():trim()
-    local bnetTag = bnetInput:GetText():trim()
+local removeBtn = CreateButton(t3, "Remove Avatar", 165, y3, 130, 28, function()
+    local name = nameInput:GetText():trim()
+    if name == "" then print("|cFF69CCF0BuddyFlash:|r Enter a name!"); return end
     local db = ns.GetDB()
-    local removed = false
-
-    if charName ~= "" then
-        charName = FormatName(charName)
-        if db.avatars[charName] then
-            db.avatars[charName] = nil
-            print("|cFF69CCF0BuddyFlash:|r Avatar removed for |cFFFFFF00" .. charName .. "|r")
-            removed = true
-        end
+    name = FormatName(name)
+    if db.avatars[name] then
+        db.avatars[name] = nil
+        print("|cFF69CCF0BuddyFlash:|r Avatar removed for |cFFFFFF00" .. name .. "|r")
     end
-
-    if bnetTag ~= "" then
-        if db.avatars[bnetTag] then
-            db.avatars[bnetTag] = nil
-            print("|cFF69CCF0BuddyFlash:|r Avatar removed for BattleTag |cFFFFFF00" .. bnetTag .. "|r")
-            removed = true
-        end
-    end
-
-    if not removed then
-        print("|cFF69CCF0BuddyFlash:|r No avatar found for that name/tag.")
-        return
-    end
-
-    nameInput:SetText("")
-    bnetInput:SetText("")
-    nameInput:ClearFocus()
-    bnetInput:ClearFocus()
+    nameInput:SetText(""); nameInput:ClearFocus()
     if ns.UpdateListUI then ns.UpdateListUI() end
     RefreshAssignmentList()
 end)
 
-yOffset = yOffset - 55
+y3 = y3 - 45
 
--- ============================================================
--- SECTION 5: CURRENT AVATAR ASSIGNMENTS LIST
--- ============================================================
+-- Current assignments
+CreateSectionHeader(t3, "Current Assignments", 10, y3)
+y3 = y3 - 25
 
-CreateSectionHeader(content, "Current Avatar Assignments", 10, yOffset)
-yOffset = yOffset - 25
-
--- Scrollable list of current assignments
-local assignListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-assignListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-assignListFrame:SetSize(430, 200)
+local assignListFrame = CreateFrame("Frame", nil, t3, "BackdropTemplate")
+assignListFrame:SetPoint("TOPLEFT", t3, "TOPLEFT", 10, y3)
+assignListFrame:SetSize(460, 360)
 assignListFrame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -567,8 +915,7 @@ assignScroll:SetPoint("TOPLEFT", assignListFrame, "TOPLEFT", 6, -6)
 assignScroll:SetPoint("BOTTOMRIGHT", assignListFrame, "BOTTOMRIGHT", -24, 6)
 
 local assignScrollChild = CreateFrame("Frame", nil, assignScroll)
-assignScrollChild:SetSize(400, 1)
-assignScrollChild:EnableMouse(true)
+assignScrollChild:SetSize(430, 1)
 assignScroll:SetScrollChild(assignScrollChild)
 
 local assignmentRows = {}
@@ -580,36 +927,27 @@ local function CreateAssignmentRow(index)
     row:SetPoint("RIGHT", assignScrollChild, "RIGHT", 0, 0)
     row:EnableMouse(true)
 
-    -- Row highlight
     local bg = row:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(row)
-    if index % 2 == 0 then
-        bg:SetColorTexture(1, 1, 1, 0.03)
-    else
-        bg:SetColorTexture(0, 0, 0, 0)
-    end
+    bg:SetColorTexture(index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.3 or 0)
 
-    -- Avatar preview
     local avatar = row:CreateTexture(nil, "ARTWORK")
     avatar:SetSize(28, 28)
     avatar:SetPoint("LEFT", row, "LEFT", 5, 0)
     avatar:SetTexCoord(0, 1, 0, 1)
     row.avatar = avatar
 
-    -- Character name
     local charText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     charText:SetPoint("LEFT", avatar, "RIGHT", 8, 4)
     charText:SetJustifyH("LEFT")
     row.charText = charText
 
-    -- Avatar filename
     local fileText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     fileText:SetPoint("LEFT", avatar, "RIGHT", 8, -8)
     fileText:SetJustifyH("LEFT")
     fileText:SetTextColor(0.5, 0.5, 0.5)
     row.fileText = fileText
 
-    -- Edit button (fills input with this character's name)
     local editBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     editBtn:SetSize(50, 22)
     editBtn:SetPoint("RIGHT", row, "RIGHT", -60, 0)
@@ -617,7 +955,6 @@ local function CreateAssignmentRow(index)
     editBtn:SetFrameLevel(row:GetFrameLevel() + 5)
     row.editBtn = editBtn
 
-    -- Remove button
     local delBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     delBtn:SetSize(55, 22)
     delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
@@ -631,15 +968,12 @@ end
 
 function RefreshAssignmentList()
     local db = ns.GetDB()
-
-    -- Collect and sort assignments
     local assignments = {}
     for charName, fileName in pairs(db.avatars) do
         table.insert(assignments, { charName = charName, fileName = fileName })
     end
     table.sort(assignments, function(a, b) return a.charName < b.charName end)
 
-    -- Create/update rows
     for i, entry in ipairs(assignments) do
         local row = assignmentRows[i] or CreateAssignmentRow(i)
         row.avatar:SetTexture(ns.AVATAR_PATH .. entry.fileName)
@@ -648,48 +982,34 @@ function RefreshAssignmentList()
         row.fileText:SetText(entry.fileName)
 
         row.editBtn:SetScript("OnClick", function()
-            -- Detect if this is a BattleTag or character name
-            if entry.charName:find("#") then
-                bnetInput:SetText(entry.charName)
-                nameInput:SetText("")
-            else
-                nameInput:SetText(entry.charName)
-                bnetInput:SetText("")
-            end
+            nameInput:SetText(entry.charName)
             selectedAvatar = entry.fileName
             UIDropDownMenu_SetText(avatarDropdown, entry.fileName)
             avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. entry.fileName)
-            nameInput:SetFocus()
         end)
 
         row.delBtn:SetScript("OnClick", function()
             db.avatars[entry.charName] = nil
-            print("|cFF69CCF0BuddyFlash:|r Avatar removed for |cFFFFFF00" .. entry.charName .. "|r")
             if ns.UpdateListUI then ns.UpdateListUI() end
             RefreshAssignmentList()
         end)
-
         row:Show()
     end
 
-    -- Hide unused rows
     for i = #assignments + 1, #assignmentRows do
         if assignmentRows[i] then assignmentRows[i]:Hide() end
     end
 
-    -- Empty state
     if #assignments == 0 then
         local row = assignmentRows[1] or CreateAssignmentRow(1)
         row.avatar:SetTexture(ns.DEFAULT_AVATAR)
         row.charText:SetText("|cFF666666No avatars assigned yet|r")
-        row.fileText:SetText("Use the controls above to assign avatars")
-        row.editBtn:Hide()
-        row.delBtn:Hide()
+        row.fileText:SetText("Use controls above or Friends tab")
+        row.editBtn:Hide(); row.delBtn:Hide()
         row:Show()
         assignScrollChild:SetHeight(36)
     else
         assignScrollChild:SetHeight(#assignments * 36)
-        -- Re-show buttons that might have been hidden
         for i = 1, #assignments do
             assignmentRows[i].editBtn:Show()
             assignmentRows[i].delBtn:Show()
@@ -697,165 +1017,52 @@ function RefreshAssignmentList()
     end
 end
 
-yOffset = yOffset - 210
+y3 = y3 - 370
+t3:SetHeight(-y3 + 20)
 
--- ============================================================
--- SECTION 6: QUICK ADD FROM FRIENDS LIST
--- ============================================================
-
-CreateSectionHeader(content, "Quick Add from Online Friends", 10, yOffset)
-yOffset = yOffset - 10
-
-local quickAddInfo = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-quickAddInfo:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-quickAddInfo:SetTextColor(0.6, 0.6, 0.6)
-quickAddInfo:SetText("Click a friend below to fill their name in the input above.")
-yOffset = yOffset - 20
-
-local quickFriendListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-quickFriendListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-quickFriendListFrame:SetSize(430, 150)
-quickFriendListFrame:SetBackdrop({
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 },
-})
-quickFriendListFrame:SetBackdropColor(0, 0, 0, 0.4)
-quickFriendListFrame:SetBackdropBorderColor(0.2, 0.3, 0.5, 0.6)
-
-local quickScroll = CreateFrame("ScrollFrame", "BuddyFlashQuickScroll", quickFriendListFrame, "UIPanelScrollFrameTemplate")
-quickScroll:SetPoint("TOPLEFT", quickFriendListFrame, "TOPLEFT", 6, -6)
-quickScroll:SetPoint("BOTTOMRIGHT", quickFriendListFrame, "BOTTOMRIGHT", -24, 6)
-
-local quickScrollChild = CreateFrame("Frame", nil, quickScroll)
-quickScrollChild:SetSize(400, 1)
-quickScroll:SetScrollChild(quickScrollChild)
-
-local quickRows = {}
-
-local function CreateQuickRow(index)
-    local row = CreateFrame("Button", nil, quickScrollChild)
-    row:SetHeight(28)
-    row:SetPoint("TOPLEFT", quickScrollChild, "TOPLEFT", 0, -(index - 1) * 28)
-    row:SetPoint("RIGHT", quickScrollChild, "RIGHT", 0, 0)
-
-    local hl = row:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(row)
-    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
-
-    local avatar = row:CreateTexture(nil, "ARTWORK")
-    avatar:SetSize(22, 22)
-    avatar:SetPoint("LEFT", row, "LEFT", 4, 0)
-    avatar:SetTexCoord(0, 1, 0, 1)
-    row.avatar = avatar
-
-    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    nameText:SetPoint("LEFT", avatar, "RIGHT", 6, 0)
-    nameText:SetJustifyH("LEFT")
-    row.nameText = nameText
-
-    local statusText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    statusText:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-    statusText:SetJustifyH("RIGHT")
-    row.statusText = statusText
-
-    quickRows[index] = row
-    return row
+tabPanels[3].refresh = function()
+    UIDropDownMenu_Initialize(avatarDropdown, AvatarDropdown_Initialize)
+    UIDropDownMenu_SetText(avatarDropdown, selectedAvatar)
+    avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. selectedAvatar)
+    RefreshAssignmentList()
 end
 
-local function RefreshQuickFriendList()
-    if not ns.CollectOnlineFriends then return end
-    local onlineFriends = ns.CollectOnlineFriends()
-    local db = ns.GetDB()
-
-    for i, friend in ipairs(onlineFriends) do
-        local row = quickRows[i] or CreateQuickRow(i)
-        row.avatar:SetTexture(ns.GetAvatarTexture(friend.charName, friend.bnetTag))
-        row.nameText:SetText(friend.charName or friend.name)
-
-        -- Show current avatar assignment status
-        local assignedAvatar = friend.charName and db.avatars[friend.charName]
-        if assignedAvatar then
-            row.statusText:SetText("|cFF00FF00" .. assignedAvatar .. "|r")
-        else
-            row.statusText:SetText("|cFF888888(no avatar)|r")
-        end
-
-        row:SetScript("OnClick", function()
-            local cn = friend.charName or friend.name
-            nameInput:SetText(cn)
-            -- Auto-fill BattleTag if available
-            if friend.bnetTag then
-                bnetInput:SetText(friend.bnetTag)
-            else
-                bnetInput:SetText("")
-            end
-            nameInput:SetFocus()
-            -- If they already have an avatar, select it in dropdown
-            if assignedAvatar then
-                selectedAvatar = assignedAvatar
-                UIDropDownMenu_SetText(avatarDropdown, assignedAvatar)
-                avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. assignedAvatar)
-            end
-        end)
-        row:Show()
-    end
-
-    -- Hide extra rows
-    for i = #onlineFriends + 1, #quickRows do
-        if quickRows[i] then quickRows[i]:Hide() end
-    end
-
-    if #onlineFriends == 0 then
-        local row = quickRows[1] or CreateQuickRow(1)
-        row.avatar:SetTexture(ns.DEFAULT_AVATAR)
-        row.nameText:SetText("|cFF666666No friends online|r")
-        row.statusText:SetText("")
-        row:SetScript("OnClick", nil)
-        row:Show()
-        quickScrollChild:SetHeight(28)
-    else
-        quickScrollChild:SetHeight(#onlineFriends * 28)
-    end
-end
-
-yOffset = yOffset - 170  -- space after quick add list
-
 -- ============================================================
--- SECTION 7: PER-FRIEND SOUND
+-- TAB 4: SOUNDS (per-friend)
 -- ============================================================
 
-CreateSectionHeader(content, "Per-Friend Login Sounds", 10, yOffset)
-yOffset = yOffset - 10
+local t4 = tabPanels[4].child
+local y4 = -10
 
-local fsInfoText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-fsInfoText:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-fsInfoText:SetTextColor(0.6, 0.6, 0.6)
-fsInfoText:SetText("Override the global login sound for specific friends.")
-yOffset = yOffset - 20
+CreateSectionHeader(t4, "Per-Friend Login Sounds", 10, y4)
+y4 = y4 - 10
 
--- Friend sound target input
-local fsTargetLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-fsTargetLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
+local fsInfo = t4:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+fsInfo:SetPoint("TOPLEFT", t4, "TOPLEFT", 20, y4)
+fsInfo:SetTextColor(0.6, 0.6, 0.6)
+fsInfo:SetText("Override the global login sound for specific friends.\nOr use the Friends tab to click-configure.")
+fsInfo:SetJustifyH("LEFT")
+y4 = y4 - 35
+
+local fsTargetLabel = t4:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+fsTargetLabel:SetPoint("TOPLEFT", t4, "TOPLEFT", 20, y4)
 fsTargetLabel:SetText("Friend:")
 
-local fsTargetInput = CreateFrame("EditBox", "BuddyFlashFSTarget", content, "InputBoxTemplate")
-fsTargetInput:SetPoint("TOPLEFT", content, "TOPLEFT", 80, yOffset)
+local fsTargetInput = CreateFrame("EditBox", "BuddyFlashFSTarget", t4, "InputBoxTemplate")
+fsTargetInput:SetPoint("TOPLEFT", t4, "TOPLEFT", 80, y4)
 fsTargetInput:SetSize(180, 25)
 fsTargetInput:SetAutoFocus(false)
 fsTargetInput:SetMaxLetters(50)
 fsTargetInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 fsTargetInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-yOffset = yOffset - 28
+y4 = y4 - 28
 
--- Sound dropdown for per-friend
-local fsSoundLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-fsSoundLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
+local fsSoundLabel = t4:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+fsSoundLabel:SetPoint("TOPLEFT", t4, "TOPLEFT", 20, y4)
 fsSoundLabel:SetText("Sound:")
 
-local fsSoundDropdown = CreateFrame("Frame", "BuddyFlashFSSoundDropdown", content, "UIDropDownMenuTemplate")
-fsSoundDropdown:SetPoint("TOPLEFT", content, "TOPLEFT", 60, yOffset + 5)
+local fsSoundDropdown = CreateFrame("Frame", "BuddyFlashFSSoundDropdown", t4, "UIDropDownMenuTemplate")
+fsSoundDropdown:SetPoint("TOPLEFT", t4, "TOPLEFT", 60, y4 + 5)
 
 local selectedFriendSound = 1
 
@@ -874,58 +1081,43 @@ local function FSSoundDropdown_Initialize(self, level)
         UIDropDownMenu_AddButton(info, level)
     end
 end
-
 UIDropDownMenu_SetWidth(fsSoundDropdown, 180)
 UIDropDownMenu_Initialize(fsSoundDropdown, FSSoundDropdown_Initialize)
 UIDropDownMenu_SetText(fsSoundDropdown, ns.SOUND_OPTIONS[1].name)
 
-yOffset = yOffset - 35
+y4 = y4 - 35
 
--- Set / Remove friend sound buttons
-local setFSBtn = CreateButton(content, "Set Sound", 20, yOffset, 110, 24, function()
+local setFSBtn = CreateButton(t4, "Set Sound", 20, y4, 110, 24, function()
     local target = fsTargetInput:GetText():trim()
-    if target == "" then
-        print("|cFF69CCF0BuddyFlash:|r Enter a friend name!")
-        return
-    end
+    if target == "" then print("|cFF69CCF0BuddyFlash:|r Enter a friend name!"); return end
     local db = ns.GetDB()
     db.friendSounds[target] = selectedFriendSound
-    local sndName = ns.SOUND_OPTIONS[selectedFriendSound] and ns.SOUND_OPTIONS[selectedFriendSound].name or "?"
-    print("|cFF69CCF0BuddyFlash:|r Sound for |cFFFFFF00" .. target .. "|r set to: " .. sndName)
-    fsTargetInput:SetText("")
-    fsTargetInput:ClearFocus()
+    print("|cFF69CCF0BuddyFlash:|r Sound for |cFFFFFF00" .. target .. "|r set to: " .. (ns.SOUND_OPTIONS[selectedFriendSound] or {}).name)
+    fsTargetInput:SetText(""); fsTargetInput:ClearFocus()
     RefreshFriendSoundList()
 end)
 
-local removeFSBtn = CreateButton(content, "Remove Sound", 145, yOffset, 120, 24, function()
+local removeFSBtn = CreateButton(t4, "Remove Sound", 145, y4, 120, 24, function()
     local target = fsTargetInput:GetText():trim()
-    if target == "" then
-        print("|cFF69CCF0BuddyFlash:|r Enter a friend name!")
-        return
-    end
+    if target == "" then print("|cFF69CCF0BuddyFlash:|r Enter a friend name!"); return end
     local db = ns.GetDB()
-    if db.friendSounds[target] then
-        db.friendSounds[target] = nil
-        print("|cFF69CCF0BuddyFlash:|r Custom sound removed for |cFFFFFF00" .. target .. "|r")
-    else
-        print("|cFF69CCF0BuddyFlash:|r No custom sound for |cFFFFFF00" .. target .. "|r")
-    end
-    fsTargetInput:SetText("")
-    fsTargetInput:ClearFocus()
+    if db.friendSounds[target] then db.friendSounds[target] = nil end
+    fsTargetInput:SetText(""); fsTargetInput:ClearFocus()
     RefreshFriendSoundList()
 end)
 
-local previewFSBtn = CreateButton(content, "Preview", 280, yOffset, 80, 24, function()
-    if ns.SOUND_OPTIONS[selectedFriendSound] then
-        ns.PlayAlertSound(ns.SOUND_OPTIONS[selectedFriendSound])
-    end
+local previewFSBtn = CreateButton(t4, "Preview", 280, y4, 80, 24, function()
+    if ns.SOUND_OPTIONS[selectedFriendSound] then ns.PlayAlertSound(ns.SOUND_OPTIONS[selectedFriendSound]) end
 end)
-yOffset = yOffset - 35
+y4 = y4 - 40
 
--- Friend sound assignments list
-local fsListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-fsListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-fsListFrame:SetSize(430, 100)
+-- Sound assignments list
+CreateSectionHeader(t4, "Current Assignments", 10, y4)
+y4 = y4 - 25
+
+local fsListFrame = CreateFrame("Frame", nil, t4, "BackdropTemplate")
+fsListFrame:SetPoint("TOPLEFT", t4, "TOPLEFT", 10, y4)
+fsListFrame:SetSize(460, 360)
 fsListFrame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -940,7 +1132,7 @@ fsScroll:SetPoint("TOPLEFT", fsListFrame, "TOPLEFT", 6, -6)
 fsScroll:SetPoint("BOTTOMRIGHT", fsListFrame, "BOTTOMRIGHT", -24, 6)
 
 local fsScrollChild = CreateFrame("Frame", nil, fsScroll)
-fsScrollChild:SetSize(400, 1)
+fsScrollChild:SetSize(430, 1)
 fsScroll:SetScrollChild(fsScrollChild)
 
 local fsRows = {}
@@ -964,7 +1156,7 @@ local function CreateFSRow(index)
 
     local sndText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sndText:SetPoint("LEFT", nameText, "RIGHT", 5, 0)
-    sndText:SetWidth(150)
+    sndText:SetWidth(180)
     sndText:SetJustifyH("LEFT")
     sndText:SetTextColor(0.7, 0.7, 0.7)
     row.sndText = sndText
@@ -991,8 +1183,7 @@ function RefreshFriendSoundList()
     local db = ns.GetDB()
     local entries = {}
     for target, idx in pairs(db.friendSounds) do
-        local sndName = ns.SOUND_OPTIONS[idx] and ns.SOUND_OPTIONS[idx].name or "Unknown #" .. idx
-        table.insert(entries, { target = target, soundIdx = idx, soundName = sndName })
+        table.insert(entries, { target = target, soundIdx = idx, soundName = (ns.SOUND_OPTIONS[idx] or {}).name or "?" })
     end
     table.sort(entries, function(a, b) return a.target < b.target end)
 
@@ -1004,11 +1195,9 @@ function RefreshFriendSoundList()
             fsTargetInput:SetText(entry.target)
             selectedFriendSound = entry.soundIdx
             UIDropDownMenu_SetText(fsSoundDropdown, entry.soundName)
-            fsTargetInput:SetFocus()
         end)
         row.delBtn:SetScript("OnClick", function()
             db.friendSounds[entry.target] = nil
-            print("|cFF69CCF0BuddyFlash:|r Custom sound removed for |cFFFFFF00" .. entry.target .. "|r")
             RefreshFriendSoundList()
         end)
         row:Show()
@@ -1020,39 +1209,35 @@ function RefreshFriendSoundList()
 
     if #entries == 0 then
         local row = fsRows[1] or CreateFSRow(1)
-        row.nameText:SetText("|cFF666666No per-friend sounds set|r")
+        row.nameText:SetText("|cFF666666No per-friend sounds|r")
         row.sndText:SetText("All friends use global sound")
-        row.editBtn:Hide()
-        row.delBtn:Hide()
+        row.editBtn:Hide(); row.delBtn:Hide()
         row:Show()
         fsScrollChild:SetHeight(26)
     else
         fsScrollChild:SetHeight(#entries * 26)
-        for i = 1, #entries do
-            fsRows[i].editBtn:Show()
-            fsRows[i].delBtn:Show()
-        end
+        for i = 1, #entries do fsRows[i].editBtn:Show(); fsRows[i].delBtn:Show() end
     end
 end
 
-yOffset = yOffset - 110
+y4 = y4 - 370
+t4:SetHeight(-y4 + 20)
+tabPanels[4].refresh = RefreshFriendSoundList
 
 -- ============================================================
--- SECTION 9: LOGIN HISTORY
+-- TAB 5: HISTORY (login history + last seen + alts)
 -- ============================================================
 
-CreateSectionHeader(content, "Login History", 10, yOffset)
-yOffset = yOffset - 10
+local t5 = tabPanels[5].child
+local y5 = -10
 
-local histInfoText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-histInfoText:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-histInfoText:SetTextColor(0.6, 0.6, 0.6)
-histInfoText:SetText("Recent login/logout activity of tracked friends.")
-yOffset = yOffset - 20
+-- Login History
+CreateSectionHeader(t5, "Login History", 10, y5)
+y5 = y5 - 25
 
-local histListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-histListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-histListFrame:SetSize(430, 180)
+local histListFrame = CreateFrame("Frame", nil, t5, "BackdropTemplate")
+histListFrame:SetPoint("TOPLEFT", t5, "TOPLEFT", 10, y5)
+histListFrame:SetSize(460, 170)
 histListFrame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1067,7 +1252,7 @@ histScroll:SetPoint("TOPLEFT", histListFrame, "TOPLEFT", 6, -6)
 histScroll:SetPoint("BOTTOMRIGHT", histListFrame, "BOTTOMRIGHT", -24, 6)
 
 local histScrollChild = CreateFrame("Frame", nil, histScroll)
-histScrollChild:SetSize(400, 1)
+histScrollChild:SetSize(430, 1)
 histScroll:SetScrollChild(histScrollChild)
 
 local histRows = {}
@@ -1077,10 +1262,6 @@ local function CreateHistRow(index)
     row:SetHeight(20)
     row:SetPoint("TOPLEFT", histScrollChild, "TOPLEFT", 0, -(index - 1) * 20)
     row:SetPoint("RIGHT", histScrollChild, "RIGHT", 0, 0)
-
-    local bg = row:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(row)
-    bg:SetColorTexture(index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.3 or 0)
 
     local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     text:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1112,7 +1293,7 @@ local function RefreshHistoryList()
 
     if #db.loginHistory == 0 then
         local row = histRows[1] or CreateHistRow(1)
-        row.text:SetText("|cFF666666No history yet. Activity will appear here.|r")
+        row.text:SetText("|cFF666666No history yet.|r")
         row:Show()
         histScrollChild:SetHeight(20)
     else
@@ -1120,32 +1301,20 @@ local function RefreshHistoryList()
     end
 end
 
--- Clear history button
-local clearHistBtn = CreateButton(content, "Clear History", 335, yOffset + 12, 110, 22, function()
-    local db = ns.GetDB()
-    db.loginHistory = {}
-    print("|cFF69CCF0BuddyFlash:|r Login history cleared.")
+local clearHistBtn = CreateButton(t5, "Clear History", 360, y5 + 22, 110, 22, function()
+    ns.GetDB().loginHistory = {}
     RefreshHistoryList()
 end)
 
-yOffset = yOffset - 190
+y5 = y5 - 180
 
--- ============================================================
--- SECTION 10: LAST SEEN
--- ============================================================
+-- Last Seen
+CreateSectionHeader(t5, "Last Seen", 10, y5)
+y5 = y5 - 25
 
-CreateSectionHeader(content, "Last Seen", 10, yOffset)
-yOffset = yOffset - 10
-
-local lsInfoText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-lsInfoText:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-lsInfoText:SetTextColor(0.6, 0.6, 0.6)
-lsInfoText:SetText("When tracked friends were last seen going offline.")
-yOffset = yOffset - 20
-
-local lsListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-lsListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-lsListFrame:SetSize(430, 140)
+local lsListFrame = CreateFrame("Frame", nil, t5, "BackdropTemplate")
+lsListFrame:SetPoint("TOPLEFT", t5, "TOPLEFT", 10, y5)
+lsListFrame:SetSize(460, 140)
 lsListFrame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1160,7 +1329,7 @@ lsScroll:SetPoint("TOPLEFT", lsListFrame, "TOPLEFT", 6, -6)
 lsScroll:SetPoint("BOTTOMRIGHT", lsListFrame, "BOTTOMRIGHT", -24, 6)
 
 local lsScrollChild = CreateFrame("Frame", nil, lsScroll)
-lsScrollChild:SetSize(400, 1)
+lsScrollChild:SetSize(430, 1)
 lsScroll:SetScrollChild(lsScrollChild)
 
 local lsRows = {}
@@ -1170,10 +1339,6 @@ local function CreateLSRow(index)
     row:SetHeight(22)
     row:SetPoint("TOPLEFT", lsScrollChild, "TOPLEFT", 0, -(index - 1) * 22)
     row:SetPoint("RIGHT", lsScrollChild, "RIGHT", 0, 0)
-
-    local bg = row:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(row)
-    bg:SetColorTexture(index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.3 or 0)
 
     local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameText:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1227,32 +1392,26 @@ local function RefreshLastSeenList()
     end
 end
 
--- Clear last seen button
-local clearLSBtn = CreateButton(content, "Clear Last Seen", 325, yOffset + 12, 120, 22, function()
-    local db = ns.GetDB()
-    db.lastSeen = {}
-    print("|cFF69CCF0BuddyFlash:|r Last seen data cleared.")
+local clearLSBtn = CreateButton(t5, "Clear Last Seen", 350, y5 + 22, 120, 22, function()
+    ns.GetDB().lastSeen = {}
     RefreshLastSeenList()
 end)
 
-yOffset = yOffset - 150
+y5 = y5 - 150
 
--- ============================================================
--- SECTION 11: KNOWN ALTS
--- ============================================================
+-- Known Alts
+CreateSectionHeader(t5, "Known Characters (Alts)", 10, y5)
+y5 = y5 - 10
 
-CreateSectionHeader(content, "Known Characters (Alts)", 10, yOffset)
-yOffset = yOffset - 10
+local altsInfo = t5:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+altsInfo:SetPoint("TOPLEFT", t5, "TOPLEFT", 20, y5)
+altsInfo:SetTextColor(0.6, 0.6, 0.6)
+altsInfo:SetText("Characters seen per BattleTag. Discovered automatically.")
+y5 = y5 - 20
 
-local altsInfoText = content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-altsInfoText:SetPoint("TOPLEFT", content, "TOPLEFT", 20, yOffset)
-altsInfoText:SetTextColor(0.6, 0.6, 0.6)
-altsInfoText:SetText("Characters seen per BattleTag. Discovered automatically over time.")
-yOffset = yOffset - 20
-
-local altsListFrame = CreateFrame("Frame", nil, content, "BackdropTemplate")
-altsListFrame:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset)
-altsListFrame:SetSize(430, 150)
+local altsListFrame = CreateFrame("Frame", nil, t5, "BackdropTemplate")
+altsListFrame:SetPoint("TOPLEFT", t5, "TOPLEFT", 10, y5)
+altsListFrame:SetSize(460, 150)
 altsListFrame:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1267,7 +1426,7 @@ altsScroll:SetPoint("TOPLEFT", altsListFrame, "TOPLEFT", 6, -6)
 altsScroll:SetPoint("BOTTOMRIGHT", altsListFrame, "BOTTOMRIGHT", -24, 6)
 
 local altsScrollChild = CreateFrame("Frame", nil, altsScroll)
-altsScrollChild:SetSize(400, 1)
+altsScrollChild:SetSize(430, 1)
 altsScroll:SetScrollChild(altsScrollChild)
 
 local altsRows = {}
@@ -1277,10 +1436,6 @@ local function CreateAltsRow(index)
     row:SetHeight(24)
     row:SetPoint("TOPLEFT", altsScrollChild, "TOPLEFT", 0, -(index - 1) * 24)
     row:SetPoint("RIGHT", altsScrollChild, "RIGHT", 0, 0)
-
-    local bg = row:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(row)
-    bg:SetColorTexture(index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.3 or 0)
 
     local tagText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     tagText:SetPoint("LEFT", row, "LEFT", 5, 0)
@@ -1303,95 +1458,57 @@ local function RefreshAltsList()
     local db = ns.GetDB()
     local entries = {}
     for tag, alts in pairs(db.knownAlts) do
-        table.insert(entries, { tag = tag, alts = alts })
+        if #alts > 0 then
+            table.insert(entries, { tag = tag, alts = alts })
+        end
     end
     table.sort(entries, function(a, b) return a.tag < b.tag end)
 
-    local idx = 0
-    for _, entry in ipairs(entries) do
-        if #entry.alts > 0 then
-            idx = idx + 1
-            local row = altsRows[idx] or CreateAltsRow(idx)
-            row.tagText:SetText("|cFFFFFF00" .. entry.tag .. "|r")
-            row.charsText:SetText(table.concat(entry.alts, ", "))
-            row:Show()
-        end
+    for i, entry in ipairs(entries) do
+        local row = altsRows[i] or CreateAltsRow(i)
+        row.tagText:SetText("|cFFFFFF00" .. entry.tag .. "|r")
+        row.charsText:SetText(table.concat(entry.alts, ", "))
+        row:Show()
     end
 
-    for i = idx + 1, #altsRows do
+    for i = #entries + 1, #altsRows do
         if altsRows[i] then altsRows[i]:Hide() end
     end
 
-    if idx == 0 then
+    if #entries == 0 then
         local row = altsRows[1] or CreateAltsRow(1)
         row.tagText:SetText("|cFF666666No alt data yet|r")
-        row.charsText:SetText("Play more to discover characters")
+        row.charsText:SetText("Play more to discover")
         row:Show()
         altsScrollChild:SetHeight(24)
     else
-        altsScrollChild:SetHeight(idx * 24)
+        altsScrollChild:SetHeight(#entries * 24)
     end
 end
 
--- Clear alts button
-local clearAltsBtn = CreateButton(content, "Clear Alts Data", 325, yOffset + 12, 120, 22, function()
-    local db = ns.GetDB()
-    db.knownAlts = {}
-    print("|cFF69CCF0BuddyFlash:|r Known alts data cleared.")
+local clearAltsBtn = CreateButton(t5, "Clear Alts", 370, y5 + 7, 100, 22, function()
+    ns.GetDB().knownAlts = {}
     RefreshAltsList()
 end)
 
-yOffset = yOffset - 165
+y5 = y5 - 165
+t5:SetHeight(-y5 + 20)
 
--- ============================================================
--- REFRESH ALL ON SHOW
--- ============================================================
-
-local function RefreshAll()
-    local db = ns.GetDB()
-
-    -- Refresh checkboxes
-    cbFlash:Refresh()
-    cbSound:Refresh()
-    cbLock:Refresh()
-    cbCharFriends:Refresh()
-    cbBNetFriends:Refresh()
-
-    -- Refresh sliders
-    sliderR:Refresh()
-    sliderG:Refresh()
-    sliderB:Refresh()
-    UpdateColorPreview()
-
-    -- Refresh banner settings
-    sliderAvatarSize:Refresh()
-    sliderBannerX:Refresh()
-    sliderBannerY:Refresh()
-    UIDropDownMenu_SetText(anchorDropdown, db.bannerAnchor or "TOP")
-
-    -- Refresh sound dropdown
-    local currentSound = ns.SOUND_OPTIONS[db.soundChoice] or ns.SOUND_OPTIONS[1]
-    UIDropDownMenu_SetText(soundDropdown, currentSound.name)
-
-    -- Refresh avatar dropdown
-    UIDropDownMenu_Initialize(avatarDropdown, AvatarDropdown_Initialize)
-    UIDropDownMenu_SetText(avatarDropdown, selectedAvatar)
-    avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. selectedAvatar)
-
-    -- Refresh assignment list
-    RefreshAssignmentList()
-
-    -- Refresh quick friend list
-    RefreshQuickFriendList()
-
-    -- Refresh new sections
-    RefreshFriendSoundList()
+tabPanels[5].refresh = function()
     RefreshHistoryList()
     RefreshLastSeenList()
     RefreshAltsList()
 end
 
-optionsFrame:SetScript("OnShow", RefreshAll)
+-- ============================================================
+-- INIT: Select first tab, refresh on show
+-- ============================================================
+
+optionsFrame:SetScript("OnShow", function()
+    SelectTab(activeTab)
+end)
+
+SelectTab(1)
 
 -- ============================================================
 -- TOGGLE FUNCTION (exposed via namespace)
