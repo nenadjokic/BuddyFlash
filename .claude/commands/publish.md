@@ -30,11 +30,11 @@ Perform a complete release. Follow ALL steps in order.
   cat > /tmp/cf_metadata.json << 'JSONEOF'
   {"changelog":"CHANGELOG_HERE","displayName":"BuddyFlash X.Y.Z","releaseType":"release","gameVersions":[15855]}
   JSONEOF
-  curl -s -X POST "https://wow.curseforge.com/api/projects/PROJECT_ID/upload-file" \
+  curl -s -X POST "https://wow.curseforge.com/api/projects/1497335/upload-file" \
     -H "X-Api-Token: 62d60221-94cc-4749-afa6-ca180d0e8b8f" \
     -F "metadata=</tmp/cf_metadata.json" -F "file=@BuddyFlash.zip"
   ```
-  NOTE: Replace PROJECT_ID with actual CurseForge project ID once created.
+  CurseForge Project ID: 1497335
 
 ## Step 4: Summary
 Print final summary with GitHub release URL and CurseForge status.
