@@ -1,6 +1,5 @@
 -- BuddyFlash Options GUI (Tab-based)
 -- ====================================
-
 local addonName, ns = ...
 
 -- ============================================================
@@ -99,6 +98,166 @@ local function FormatName(text)
 end
 
 -- ============================================================
+-- INLINE EDIT POPUP (reusable for Avatar / Sound / Whisper)
+-- ============================================================
+
+local editPopup = CreateFrame("Frame", "BuddyFlashEditPopup", UIParent, "BackdropTemplate")
+editPopup:SetSize(320, 140)
+editPopup:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
+editPopup:SetFrameStrata("FULLSCREEN_DIALOG")
+editPopup:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 },
+})
+editPopup:SetBackdropColor(0.05, 0.05, 0.15, 0.97)
+editPopup:SetBackdropBorderColor(0.4, 0.6, 1.0, 0.9)
+editPopup:SetMovable(true)
+editPopup:EnableMouse(true)
+editPopup:RegisterForDrag("LeftButton")
+editPopup:SetScript("OnDragStart", editPopup.StartMoving)
+editPopup:SetScript("OnDragStop", editPopup.StopMovingOrSizing)
+editPopup:SetClampedToScreen(true)
+editPopup:Hide()
+tinsert(UISpecialFrames, "BuddyFlashEditPopup")
+
+local editTitle = editPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+editTitle:SetPoint("TOP", editPopup, "TOP", 0, -12)
+
+local editCloseBtn = CreateFrame("Button", nil, editPopup, "UIPanelCloseButton")
+editCloseBtn:SetPoint("TOPRIGHT", editPopup, "TOPRIGHT", -2, -2)
+
+-- Avatar dropdown (hidden by default)
+local editAvatarDropdown = CreateFrame("Frame", "BuddyFlashEditAvatarDD", editPopup, "UIDropDownMenuTemplate")
+editAvatarDropdown:SetPoint("TOPLEFT", editPopup, "TOPLEFT", 20, -40)
+editAvatarDropdown:Hide()
+
+local editAvatarPreview = editPopup:CreateTexture(nil, "ARTWORK")
+editAvatarPreview:SetSize(36, 36)
+editAvatarPreview:SetPoint("LEFT", editPopup, "TOPLEFT", 25, -42)
+editAvatarPreview:SetTexCoord(0, 1, 0, 1)
+editAvatarPreview:Hide()
+
+-- Sound dropdown (hidden by default)
+local editSoundDropdown = CreateFrame("Frame", "BuddyFlashEditSoundDD", editPopup, "UIDropDownMenuTemplate")
+editSoundDropdown:SetPoint("TOPLEFT", editPopup, "TOPLEFT", 20, -40)
+editSoundDropdown:Hide()
+
+-- Whisper text input (hidden by default)
+local editWhisperInput = CreateFrame("EditBox", "BuddyFlashEditWspInput", editPopup, "InputBoxTemplate")
+editWhisperInput:SetPoint("TOPLEFT", editPopup, "TOPLEFT", 30, -48)
+editWhisperInput:SetSize(260, 25)
+editWhisperInput:SetAutoFocus(false)
+editWhisperInput:SetMaxLetters(255)
+editWhisperInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+editWhisperInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+editWhisperInput:Hide()
+
+-- Save button
+local editSaveBtn = CreateFrame("Button", nil, editPopup, "UIPanelButtonTemplate")
+editSaveBtn:SetSize(100, 26)
+editSaveBtn:SetPoint("BOTTOMLEFT", editPopup, "BOTTOMLEFT", 20, 12)
+editSaveBtn:SetText("Save")
+
+-- Preview button (sounds only)
+local editPreviewBtn = CreateFrame("Button", nil, editPopup, "UIPanelButtonTemplate")
+editPreviewBtn:SetSize(80, 26)
+editPreviewBtn:SetPoint("BOTTOM", editPopup, "BOTTOM", 0, 12)
+editPreviewBtn:SetText("Preview")
+editPreviewBtn:Hide()
+
+-- Cancel button
+local editCancelBtn = CreateFrame("Button", nil, editPopup, "UIPanelButtonTemplate")
+editCancelBtn:SetSize(80, 26)
+editCancelBtn:SetPoint("BOTTOMRIGHT", editPopup, "BOTTOMRIGHT", -20, 12)
+editCancelBtn:SetText("Cancel")
+editCancelBtn:SetScript("OnClick", function() editPopup:Hide() end)
+
+local editSelectedAvatar, editSelectedSound
+
+local function ShowEditPopup_Avatar(name, currentFile, onSave)
+    editTitle:SetText("|cFFFFFF00" .. name .. "|r - Avatar")
+    editAvatarDropdown:Show(); editAvatarPreview:Show()
+    editSoundDropdown:Hide(); editWhisperInput:Hide(); editPreviewBtn:Hide()
+    editAvatarPreview:SetPoint("LEFT", editPopup, "TOPLEFT", 25, -58)
+    editAvatarDropdown:SetPoint("TOPLEFT", editPopup, "TOPLEFT", 65, -44)
+    editSelectedAvatar = currentFile or "default"
+    editAvatarPreview:SetTexture(ns.AVATAR_PATH .. editSelectedAvatar)
+    UIDropDownMenu_SetWidth(editAvatarDropdown, 170)
+    UIDropDownMenu_Initialize(editAvatarDropdown, function(self, level)
+        for _, avName in ipairs(GetAvailableAvatars()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = avName
+            info.value = avName
+            info.checked = (avName == editSelectedAvatar)
+            info.func = function(btn)
+                editSelectedAvatar = btn.value
+                UIDropDownMenu_SetText(editAvatarDropdown, btn.value)
+                editAvatarPreview:SetTexture(ns.AVATAR_PATH .. btn.value)
+                CloseDropDownMenus()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UIDropDownMenu_SetText(editAvatarDropdown, editSelectedAvatar)
+    editSaveBtn:SetScript("OnClick", function()
+        onSave(editSelectedAvatar)
+        editPopup:Hide()
+    end)
+    editPopup:Show()
+end
+
+local function ShowEditPopup_Sound(name, currentIdx, onSave)
+    editTitle:SetText("|cFFFFFF00" .. name .. "|r - Sound")
+    editSoundDropdown:Show(); editPreviewBtn:Show()
+    editAvatarDropdown:Hide(); editAvatarPreview:Hide(); editWhisperInput:Hide()
+    editSoundDropdown:SetPoint("TOPLEFT", editPopup, "TOPLEFT", 20, -40)
+    editSelectedSound = currentIdx or 1
+    UIDropDownMenu_SetWidth(editSoundDropdown, 220)
+    UIDropDownMenu_Initialize(editSoundDropdown, function(self, level)
+        for i, snd in ipairs(ns.SOUND_OPTIONS) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = snd.name
+            info.value = i
+            info.checked = (i == editSelectedSound)
+            info.func = function(btn)
+                editSelectedSound = btn.value
+                UIDropDownMenu_SetText(editSoundDropdown, ns.SOUND_OPTIONS[btn.value].name)
+                ns.PlayAlertSound(ns.SOUND_OPTIONS[btn.value])
+                CloseDropDownMenus()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UIDropDownMenu_SetText(editSoundDropdown, (ns.SOUND_OPTIONS[editSelectedSound] or ns.SOUND_OPTIONS[1]).name)
+    editPreviewBtn:SetScript("OnClick", function()
+        if ns.SOUND_OPTIONS[editSelectedSound] then ns.PlayAlertSound(ns.SOUND_OPTIONS[editSelectedSound]) end
+    end)
+    editSaveBtn:SetScript("OnClick", function()
+        onSave(editSelectedSound)
+        editPopup:Hide()
+    end)
+    editPopup:Show()
+end
+
+local function ShowEditPopup_Whisper(name, currentMsg, onSave)
+    editTitle:SetText("|cFFFFFF00" .. name .. "|r - Whisper")
+    editWhisperInput:Show()
+    editAvatarDropdown:Hide(); editAvatarPreview:Hide(); editSoundDropdown:Hide(); editPreviewBtn:Hide()
+    editWhisperInput:SetText(currentMsg or "")
+    editWhisperInput:SetFocus()
+    editSaveBtn:SetScript("OnClick", function()
+        local msg = editWhisperInput:GetText():trim()
+        if msg ~= "" then
+            onSave(msg)
+        end
+        editPopup:Hide()
+    end)
+    editPopup:Show()
+end
+
+-- ============================================================
 -- MAIN OPTIONS FRAME
 -- ============================================================
 
@@ -142,7 +301,7 @@ closeBtn:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -2, -2)
 -- TAB SYSTEM
 -- ============================================================
 
-local TAB_NAMES = { "General", "Friends", "Avatars", "Sounds", "History" }
+local TAB_NAMES = { "General", "Friends", "Avatars", "Sounds", "Whisper", "History" }
 local tabButtons = {}
 local tabPanels = {}
 local activeTab = 1
@@ -171,8 +330,8 @@ end
 
 for i, name in ipairs(TAB_NAMES) do
     local tab = CreateFrame("Button", "BuddyFlashTab" .. i, optionsFrame)
-    tab:SetSize(96, 24)
-    tab:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 10 + (i - 1) * 100, -38)
+    tab:SetSize(80, 24)
+    tab:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 8 + (i - 1) * 86, -38)
 
     local bg = tab:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(tab)
@@ -648,25 +807,24 @@ function ns.ShowFriendConfig(charName, bnetTag, displayName)
     local db = ns.GetDB()
     local key = bnetTag or charName
 
+    local Lookup = ns.LookupByTag
+
     -- Load avatar
-    local currentAvatar = nil
-    if charName and db.avatars[charName] then currentAvatar = db.avatars[charName] end
-    if bnetTag and db.avatars[bnetTag] then currentAvatar = db.avatars[bnetTag] end
+    local currentAvatar = Lookup(db.avatars, bnetTag)
+    if not currentAvatar and charName then currentAvatar = db.avatars[charName] end
     fcSelectedAvatar = currentAvatar or "default"
     UIDropDownMenu_SetText(fcAvatarDropdown, fcSelectedAvatar)
     fcAvatarPreview:SetTexture(ns.AVATAR_PATH .. fcSelectedAvatar)
 
     -- Load sound
-    local currentSound = nil
-    if bnetTag and db.friendSounds[bnetTag] then currentSound = db.friendSounds[bnetTag] end
-    if charName and db.friendSounds[charName] then currentSound = db.friendSounds[charName] end
+    local currentSound = Lookup(db.friendSounds, bnetTag)
+    if not currentSound and charName then currentSound = db.friendSounds[charName] end
     fcSelectedSound = currentSound or db.soundChoice or 1
     UIDropDownMenu_SetText(fcSoundDropdown, (ns.SOUND_OPTIONS[fcSelectedSound] or ns.SOUND_OPTIONS[1]).name)
 
     -- Load whisper
-    local currentWhisper = nil
-    if bnetTag and db.autoWhisper[bnetTag] then currentWhisper = db.autoWhisper[bnetTag] end
-    if charName and db.autoWhisper[charName] then currentWhisper = db.autoWhisper[charName] end
+    local currentWhisper = Lookup(db.autoWhisper, bnetTag)
+    if not currentWhisper and charName then currentWhisper = db.autoWhisper[charName] end
     fcWhisperInput:SetText(currentWhisper or "")
 
     fcPopup:Show()
@@ -807,14 +965,15 @@ local function RefreshFriendList()
         -- Build status badges
         local badges = {}
         local key = friend.bnetTag
+        local Lookup = ns.LookupByTag
         if key then
-            if db.avatars[key] or (friend.charName and db.avatars[friend.charName]) then
+            if Lookup(db.avatars, key) or (friend.charName and db.avatars[friend.charName]) then
                 table.insert(badges, "|cFF00FF00av|r")
             end
-            if db.friendSounds[key] or (friend.charName and db.friendSounds[friend.charName]) then
+            if Lookup(db.friendSounds, key) or (friend.charName and db.friendSounds[friend.charName]) then
                 table.insert(badges, "|cFF69CCF0snd|r")
             end
-            if db.autoWhisper[key] or (friend.charName and db.autoWhisper[friend.charName]) then
+            if Lookup(db.autoWhisper, key) or (friend.charName and db.autoWhisper[friend.charName]) then
                 table.insert(badges, "|cFFFFCC00wsp|r")
             end
         end
@@ -1038,10 +1197,11 @@ function RefreshAssignmentList()
         row.fileText:SetText(entry.fileName)
 
         row.editBtn:SetScript("OnClick", function()
-            nameInput:SetText(entry.charName)
-            selectedAvatar = entry.fileName
-            UIDropDownMenu_SetText(avatarDropdown, entry.fileName)
-            avatarPreviewTexture:SetTexture(ns.AVATAR_PATH .. entry.fileName)
+            ShowEditPopup_Avatar(entry.charName, entry.fileName, function(newFile)
+                db.avatars[entry.charName] = newFile
+                if ns.UpdateListUI then ns.UpdateListUI() end
+                RefreshAssignmentList()
+            end)
         end)
 
         row.delBtn:SetScript("OnClick", function()
@@ -1195,8 +1355,8 @@ local fsRows = {}
 
 local function CreateFSRow(index)
     local row = CreateFrame("Frame", nil, fsScrollChild)
-    row:SetHeight(26)
-    row:SetPoint("TOPLEFT", fsScrollChild, "TOPLEFT", 0, -(index - 1) * 26)
+    row:SetHeight(30)
+    row:SetPoint("TOPLEFT", fsScrollChild, "TOPLEFT", 0, -(index - 1) * 30)
     row:SetPoint("RIGHT", fsScrollChild, "RIGHT", 0, 0)
     row:EnableMouse(true)
 
@@ -1218,16 +1378,16 @@ local function CreateFSRow(index)
     row.sndText = sndText
 
     local editBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    editBtn:SetSize(28, 20)
-    editBtn:SetPoint("RIGHT", row, "RIGHT", -35, 0)
-    editBtn:SetText("E")
+    editBtn:SetSize(50, 22)
+    editBtn:SetPoint("RIGHT", row, "RIGHT", -60, 0)
+    editBtn:SetText("Edit")
     editBtn:SetFrameLevel(row:GetFrameLevel() + 5)
     row.editBtn = editBtn
 
     local delBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    delBtn:SetSize(28, 20)
-    delBtn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-    delBtn:SetText("X")
+    delBtn:SetSize(55, 22)
+    delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    delBtn:SetText("Remove")
     delBtn:SetFrameLevel(row:GetFrameLevel() + 5)
     row.delBtn = delBtn
 
@@ -1248,9 +1408,10 @@ function RefreshFriendSoundList()
         row.nameText:SetText("|cFFFFFF00" .. entry.target .. "|r")
         row.sndText:SetText(entry.soundName)
         row.editBtn:SetScript("OnClick", function()
-            fsTargetInput:SetText(entry.target)
-            selectedFriendSound = entry.soundIdx
-            UIDropDownMenu_SetText(fsSoundDropdown, entry.soundName)
+            ShowEditPopup_Sound(entry.target, entry.soundIdx, function(newIdx)
+                db.friendSounds[entry.target] = newIdx
+                RefreshFriendSoundList()
+            end)
         end)
         row.delBtn:SetScript("OnClick", function()
             db.friendSounds[entry.target] = nil
@@ -1269,9 +1430,9 @@ function RefreshFriendSoundList()
         row.sndText:SetText("All friends use global sound")
         row.editBtn:Hide(); row.delBtn:Hide()
         row:Show()
-        fsScrollChild:SetHeight(26)
+        fsScrollChild:SetHeight(30)
     else
-        fsScrollChild:SetHeight(#entries * 26)
+        fsScrollChild:SetHeight(#entries * 30)
         for i = 1, #entries do fsRows[i].editBtn:Show(); fsRows[i].delBtn:Show() end
     end
 end
@@ -1281,10 +1442,194 @@ t4:SetHeight(-y4 + 20)
 tabPanels[4].refresh = RefreshFriendSoundList
 
 -- ============================================================
--- TAB 5: HISTORY (login history + last seen + alts)
+-- TAB 5: WHISPER (per-friend auto-whisper messages)
 -- ============================================================
 
-local t5 = tabPanels[5].child
+local t5w = tabPanels[5].child
+local y5w = -10
+
+CreateSectionHeader(t5w, "Per-Friend Auto-Whisper", 10, y5w)
+y5w = y5w - 26
+
+local wspInfo = t5w:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+wspInfo:SetPoint("TOPLEFT", t5w, "TOPLEFT", 20, y5w)
+wspInfo:SetTextColor(0.6, 0.6, 0.6)
+wspInfo:SetText("Set a message to automatically send when a friend logs in.\nRequires 'Enable Auto-Whisper' in the General tab.")
+wspInfo:SetJustifyH("LEFT")
+y5w = y5w - 40
+
+local wspTargetLabel = t5w:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+wspTargetLabel:SetPoint("TOPLEFT", t5w, "TOPLEFT", 20, y5w)
+wspTargetLabel:SetText("Friend:")
+
+local wspTargetInput = CreateFrame("EditBox", "BuddyFlashWspTarget", t5w, "InputBoxTemplate")
+wspTargetInput:SetPoint("TOPLEFT", t5w, "TOPLEFT", 80, y5w)
+wspTargetInput:SetSize(180, 25)
+wspTargetInput:SetAutoFocus(false)
+wspTargetInput:SetMaxLetters(50)
+wspTargetInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+wspTargetInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+y5w = y5w - 28
+
+local wspMsgLabel = t5w:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+wspMsgLabel:SetPoint("TOPLEFT", t5w, "TOPLEFT", 20, y5w)
+wspMsgLabel:SetText("Message:")
+
+local wspMsgInput = CreateFrame("EditBox", "BuddyFlashWspMsg", t5w, "InputBoxTemplate")
+wspMsgInput:SetPoint("TOPLEFT", t5w, "TOPLEFT", 90, y5w)
+wspMsgInput:SetSize(350, 25)
+wspMsgInput:SetAutoFocus(false)
+wspMsgInput:SetMaxLetters(255)
+wspMsgInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+wspMsgInput:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+y5w = y5w - 35
+
+local setWspBtn = CreateButton(t5w, "Set Whisper", 20, y5w, 120, 24, function()
+    local target = wspTargetInput:GetText():trim()
+    local msg = wspMsgInput:GetText():trim()
+    if target == "" then print("|cFF69CCF0BuddyFlash:|r Enter a friend name!"); return end
+    if msg == "" then print("|cFF69CCF0BuddyFlash:|r Enter a message!"); return end
+    local db = ns.GetDB()
+    db.autoWhisper[target] = msg
+    print("|cFF69CCF0BuddyFlash:|r Whisper for |cFFFFFF00" .. target .. "|r set to: " .. msg)
+    wspTargetInput:SetText(""); wspMsgInput:SetText("")
+    wspTargetInput:ClearFocus(); wspMsgInput:ClearFocus()
+    RefreshWhisperList()
+end)
+
+local removeWspBtn = CreateButton(t5w, "Remove Whisper", 155, y5w, 130, 24, function()
+    local target = wspTargetInput:GetText():trim()
+    if target == "" then print("|cFF69CCF0BuddyFlash:|r Enter a friend name!"); return end
+    local db = ns.GetDB()
+    if db.autoWhisper[target] then
+        db.autoWhisper[target] = nil
+        print("|cFF69CCF0BuddyFlash:|r Whisper removed for |cFFFFFF00" .. target .. "|r")
+    end
+    wspTargetInput:SetText(""); wspMsgInput:SetText("")
+    wspTargetInput:ClearFocus(); wspMsgInput:ClearFocus()
+    RefreshWhisperList()
+end)
+y5w = y5w - 40
+
+-- Whisper assignments list
+CreateSectionHeader(t5w, "Current Assignments", 10, y5w)
+y5w = y5w - 25
+
+local wspListFrame = CreateFrame("Frame", nil, t5w, "BackdropTemplate")
+wspListFrame:SetPoint("TOPLEFT", t5w, "TOPLEFT", 10, y5w)
+wspListFrame:SetSize(460, 360)
+wspListFrame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+})
+wspListFrame:SetBackdropColor(0, 0, 0, 0.4)
+wspListFrame:SetBackdropBorderColor(0.2, 0.3, 0.5, 0.6)
+
+local wspScroll = CreateFrame("ScrollFrame", "BuddyFlashWspScroll", wspListFrame, "UIPanelScrollFrameTemplate")
+wspScroll:SetPoint("TOPLEFT", wspListFrame, "TOPLEFT", 6, -6)
+wspScroll:SetPoint("BOTTOMRIGHT", wspListFrame, "BOTTOMRIGHT", -24, 6)
+
+local wspScrollChild = CreateFrame("Frame", nil, wspScroll)
+wspScrollChild:SetSize(430, 1)
+wspScroll:SetScrollChild(wspScrollChild)
+
+local wspRows = {}
+
+local function CreateWspRow(index)
+    local row = CreateFrame("Frame", nil, wspScrollChild)
+    row:SetHeight(30)
+    row:SetPoint("TOPLEFT", wspScrollChild, "TOPLEFT", 0, -(index - 1) * 30)
+    row:SetPoint("RIGHT", wspScrollChild, "RIGHT", 0, 0)
+    row:EnableMouse(true)
+
+    local bg = row:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(row)
+    bg:SetColorTexture(index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.05 or 0, index % 2 == 0 and 0.3 or 0)
+
+    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    nameText:SetPoint("LEFT", row, "LEFT", 5, 0)
+    nameText:SetWidth(120)
+    nameText:SetJustifyH("LEFT")
+    row.nameText = nameText
+
+    local msgText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    msgText:SetPoint("LEFT", nameText, "RIGHT", 5, 0)
+    msgText:SetWidth(230)
+    msgText:SetJustifyH("LEFT")
+    msgText:SetTextColor(0.7, 0.7, 0.7)
+    row.msgText = msgText
+
+    local editBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    editBtn:SetSize(50, 22)
+    editBtn:SetPoint("RIGHT", row, "RIGHT", -60, 0)
+    editBtn:SetText("Edit")
+    editBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    row.editBtn = editBtn
+
+    local delBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    delBtn:SetSize(55, 22)
+    delBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+    delBtn:SetText("Remove")
+    delBtn:SetFrameLevel(row:GetFrameLevel() + 5)
+    row.delBtn = delBtn
+
+    wspRows[index] = row
+    return row
+end
+
+function RefreshWhisperList()
+    local db = ns.GetDB()
+    local entries = {}
+    for target, msg in pairs(db.autoWhisper) do
+        table.insert(entries, { target = target, msg = msg })
+    end
+    table.sort(entries, function(a, b) return a.target < b.target end)
+
+    for i, entry in ipairs(entries) do
+        local row = wspRows[i] or CreateWspRow(i)
+        row.nameText:SetText("|cFFFFFF00" .. entry.target .. "|r")
+        row.msgText:SetText(entry.msg)
+        row.editBtn:SetScript("OnClick", function()
+            ShowEditPopup_Whisper(entry.target, entry.msg, function(newMsg)
+                db.autoWhisper[entry.target] = newMsg
+                RefreshWhisperList()
+            end)
+        end)
+        row.delBtn:SetScript("OnClick", function()
+            db.autoWhisper[entry.target] = nil
+            RefreshWhisperList()
+        end)
+        row:Show()
+    end
+
+    for i = #entries + 1, #wspRows do
+        if wspRows[i] then wspRows[i]:Hide() end
+    end
+
+    if #entries == 0 then
+        local row = wspRows[1] or CreateWspRow(1)
+        row.nameText:SetText("|cFF666666No auto-whispers|r")
+        row.msgText:SetText("Set messages above or via Friends tab")
+        row.editBtn:Hide(); row.delBtn:Hide()
+        row:Show()
+        wspScrollChild:SetHeight(30)
+    else
+        wspScrollChild:SetHeight(#entries * 30)
+        for i = 1, #entries do wspRows[i].editBtn:Show(); wspRows[i].delBtn:Show() end
+    end
+end
+
+y5w = y5w - 370
+t5w:SetHeight(-y5w + 20)
+tabPanels[5].refresh = RefreshWhisperList
+
+-- ============================================================
+-- TAB 6: HISTORY (login history + last seen)
+-- ============================================================
+
+local t5 = tabPanels[6].child
 local y5 = -10
 
 -- Login History
@@ -1478,118 +1823,11 @@ local clearLSBtn = CreateButton(t5, "Clear Last Seen", 350, y5 + 22, 120, 22, fu
 end)
 
 y5 = y5 - 150
-
--- Known Alts
-CreateSectionHeader(t5, "Known Characters (Alts)", 10, y5)
-y5 = y5 - 26
-
-local altsInfo = t5:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-altsInfo:SetPoint("TOPLEFT", t5, "TOPLEFT", 20, y5)
-altsInfo:SetTextColor(0.6, 0.6, 0.6)
-altsInfo:SetText("Characters seen per BattleTag. Discovered automatically.")
-y5 = y5 - 20
-
-local altsListFrame = CreateFrame("Frame", nil, t5, "BackdropTemplate")
-altsListFrame:SetPoint("TOPLEFT", t5, "TOPLEFT", 10, y5)
-altsListFrame:SetSize(460, 150)
-altsListFrame:SetBackdrop({
-    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 },
-})
-altsListFrame:SetBackdropColor(0, 0, 0, 0.4)
-altsListFrame:SetBackdropBorderColor(0.2, 0.3, 0.5, 0.6)
-
-local altsScroll = CreateFrame("ScrollFrame", "BuddyFlashAltsScroll", altsListFrame, "UIPanelScrollFrameTemplate")
-altsScroll:SetPoint("TOPLEFT", altsListFrame, "TOPLEFT", 6, -6)
-altsScroll:SetPoint("BOTTOMRIGHT", altsListFrame, "BOTTOMRIGHT", -24, 6)
-
-local altsScrollChild = CreateFrame("Frame", nil, altsScroll)
-altsScrollChild:SetSize(430, 1)
-altsScroll:SetScrollChild(altsScrollChild)
-
-local altsRows = {}
-
-local function CreateAltsRow(index)
-    local row = CreateFrame("Button", nil, altsScrollChild)
-    row:SetHeight(24)
-    row:SetPoint("TOPLEFT", altsScrollChild, "TOPLEFT", 0, -(index - 1) * 24)
-    row:SetPoint("RIGHT", altsScrollChild, "RIGHT", 0, 0)
-
-    local bg = row:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(row)
-    bg:SetColorTexture(index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.08 or 0, index % 2 == 0 and 0.12 or 0, index % 2 == 0 and 0.4 or 0)
-
-    local hl = row:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(row)
-    hl:SetColorTexture(0.2, 0.4, 0.6, 0.3)
-
-    local tagText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    tagText:SetPoint("LEFT", row, "LEFT", 5, 0)
-    tagText:SetWidth(130)
-    tagText:SetJustifyH("LEFT")
-    row.tagText = tagText
-
-    local charsText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    charsText:SetPoint("LEFT", tagText, "RIGHT", 5, 0)
-    charsText:SetPoint("RIGHT", row, "RIGHT", -5, 0)
-    charsText:SetJustifyH("LEFT")
-    charsText:SetTextColor(0.8, 0.8, 0.8)
-    row.charsText = charsText
-
-    altsRows[index] = row
-    return row
-end
-
-local function RefreshAltsList()
-    local db = ns.GetDB()
-    local entries = {}
-    for tag, alts in pairs(db.knownAlts) do
-        if #alts > 0 then
-            table.insert(entries, { tag = tag, alts = alts })
-        end
-    end
-    table.sort(entries, function(a, b) return a.tag < b.tag end)
-
-    for i, entry in ipairs(entries) do
-        local row = altsRows[i] or CreateAltsRow(i)
-        row.tagText:SetText("|cFFFFFF00" .. entry.tag .. "|r")
-        row.charsText:SetText(table.concat(entry.alts, ", "))
-        row:SetScript("OnClick", function()
-            ns.ShowFriendConfig(entry.alts[1], entry.tag, entry.tag)
-        end)
-        row:Show()
-    end
-
-    for i = #entries + 1, #altsRows do
-        if altsRows[i] then altsRows[i]:Hide() end
-    end
-
-    if #entries == 0 then
-        local row = altsRows[1] or CreateAltsRow(1)
-        row.tagText:SetText("|cFF666666No alt data yet|r")
-        row.charsText:SetText("Play more to discover")
-        row:SetScript("OnClick", nil)
-        row:Show()
-        altsScrollChild:SetHeight(24)
-    else
-        altsScrollChild:SetHeight(#entries * 24)
-    end
-end
-
-local clearAltsBtn = CreateButton(t5, "Clear Alts", 370, y5 + 22, 100, 22, function()
-    ns.GetDB().knownAlts = {}
-    RefreshAltsList()
-end)
-
-y5 = y5 - 165
 t5:SetHeight(-y5 + 20)
 
-tabPanels[5].refresh = function()
+tabPanels[6].refresh = function()
     RefreshHistoryList()
     RefreshLastSeenList()
-    RefreshAltsList()
 end
 
 -- ============================================================

@@ -2,7 +2,7 @@
 ## Title: BuddyFlash
 ## Notes: Screen flash, sound alerts & animated banners when your friends log in. Custom avatars, per-friend sounds, auto-whisper.
 ## Author: wowadd
-## Version: 1.0.4
+## Version: 1.0.5
 ## SavedVariables: BuddyFlashDB
 
 AvatarManifest.lua

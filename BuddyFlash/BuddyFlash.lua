@@ -3,7 +3,7 @@
 
 local addonName, ns = ...
 
-local BUDDYFLASH_VERSION = "1.0.4"
+local BUDDYFLASH_VERSION = "1.0.5"
 ns.VERSION = BUDDYFLASH_VERSION
 ns.SUPPORT_PAYPAL = "paypal.me/nenadjokicRS"
 ns.SUPPORT_COFFEE = "buymeacoffee.com/nenadjokic"
@@ -80,19 +80,28 @@ local function GetDB()
     return BuddyFlashDB
 end
 
+-- Lookup helper: matches "MightyPotato" against both "MightyPotato" and "MightyPotato#12345" keys
+local function LookupByTag(tbl, tag)
+    if not tbl or not tag then return nil end
+    if tbl[tag] then return tbl[tag] end
+    -- API returns name without #, user may have saved with # — scan for prefix match
+    for key, val in pairs(tbl) do
+        local base = key:match("^(.+)#%d+$")
+        if base and base == tag then return val end
+    end
+    return nil
+end
+ns.LookupByTag = LookupByTag
+
 local function GetAvatarTexture(charName, bnetTag)
     local db = GetDB()
     if db.avatars then
-        -- Check BattleTag first (covers all characters of that friend)
-        if bnetTag and db.avatars[bnetTag] then
-            return AVATAR_PATH .. db.avatars[bnetTag]
-        end
-        -- Then check character name
+        local found = LookupByTag(db.avatars, bnetTag)
+        if found then return AVATAR_PATH .. found end
         if charName and db.avatars[charName] then
             return AVATAR_PATH .. db.avatars[charName]
         end
     end
-    -- Use custom default.tga if it exists, otherwise WoW built-in icon
     return CUSTOM_DEFAULT_AVATAR
 end
 
@@ -546,22 +555,10 @@ local function GetRow(index)
                 GameTooltip:AddLine("Last offline: " .. timeStr, 0.6, 0.6, 0.6)
             end
 
-            -- Known alts
-            if fd.bnetTag and db.knownAlts[fd.bnetTag] and #db.knownAlts[fd.bnetTag] > 1 then
-                GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("Known characters:", 1, 0.82, 0)
-                for _, altName in ipairs(db.knownAlts[fd.bnetTag]) do
-                    local marker = (altName == fd.charName) and " |cFF00FF00<< now|r" or ""
-                    GameTooltip:AddLine("  " .. altName .. marker, 0.8, 0.8, 0.8)
-                end
-            end
-
             -- Auto-whisper status
             if db.autoWhisperEnabled then
-                local whisperMsg = nil
-                if fd.bnetTag and db.autoWhisper[fd.bnetTag] then
-                    whisperMsg = db.autoWhisper[fd.bnetTag]
-                elseif fd.charName and db.autoWhisper[fd.charName] then
+                local whisperMsg = LookupByTag(db.autoWhisper, fd.bnetTag)
+                if not whisperMsg and fd.charName then
                     whisperMsg = db.autoWhisper[fd.charName]
                 end
                 if whisperMsg then
@@ -750,28 +747,13 @@ local function UpdateListUI()
     for _, friend in ipairs(onlineFriends) do
         currentKeys[friend.key] = { name = friend.name, charName = friend.charName, bnetTag = friend.bnetTag }
 
-        -- Track known alts per BNet account
-        if friend.bnetTag and friend.charName then
-            if not db.knownAlts[friend.bnetTag] then
-                db.knownAlts[friend.bnetTag] = {}
-            end
-            local found = false
-            for _, alt in ipairs(db.knownAlts[friend.bnetTag]) do
-                if alt == friend.charName then found = true; break end
-            end
-            if not found then
-                table.insert(db.knownAlts[friend.bnetTag], friend.charName)
-            end
-        end
-
         if not previousOnline[friend.key] then
             -- New login detected - only notify if friend is in our avatar list
             local isTracked = false
             if db.avatars then
                 if friend.charName and db.avatars[friend.charName] then
                     isTracked = true
-                end
-                if friend.bnetTag and db.avatars[friend.bnetTag] then
+                elseif LookupByTag(db.avatars, friend.bnetTag) then
                     isTracked = true
                 end
             end
@@ -782,10 +764,8 @@ local function UpdateListUI()
 
                 -- Per-friend sound or global sound
                 if db.soundEnabled then
-                    local friendSoundIdx = nil
-                    if friend.bnetTag and db.friendSounds[friend.bnetTag] then
-                        friendSoundIdx = db.friendSounds[friend.bnetTag]
-                    elseif friend.charName and db.friendSounds[friend.charName] then
+                    local friendSoundIdx = LookupByTag(db.friendSounds, friend.bnetTag)
+                    if not friendSoundIdx and friend.charName then
                         friendSoundIdx = db.friendSounds[friend.charName]
                     end
                     local soundEntry
@@ -812,10 +792,8 @@ local function UpdateListUI()
 
                 -- Auto-whisper (only if globally enabled)
                 if db.autoWhisperEnabled then
-                    local whisperMsg = nil
-                    if friend.bnetTag and db.autoWhisper[friend.bnetTag] then
-                        whisperMsg = db.autoWhisper[friend.bnetTag]
-                    elseif friend.charName and db.autoWhisper[friend.charName] then
+                    local whisperMsg = LookupByTag(db.autoWhisper, friend.bnetTag)
+                    if not whisperMsg and friend.charName then
                         whisperMsg = db.autoWhisper[friend.charName]
                     end
                     if whisperMsg and friend.isBNet and friend.bnetAccountID then
@@ -844,7 +822,7 @@ local function UpdateListUI()
             local isTracked = false
             if db.avatars then
                 if logoutChar and db.avatars[logoutChar] then isTracked = true end
-                if logoutBnet and db.avatars[logoutBnet] then isTracked = true end
+                if not isTracked and LookupByTag(db.avatars, logoutBnet) then isTracked = true end
             end
 
             if isTracked then
@@ -1275,39 +1253,6 @@ SlashCmdList["BUDDYFLASH"] = function(msg)
         end
         if count == 0 then
             print("  |cFF888888No per-friend sounds configured.|r")
-        end
-
-    -- /bf alts <BattleTag>
-    elseif cmd:match("^alts%s+.+$") then
-        local searchTag = cmd:match("^alts%s+(.+)$"):trim()
-        local db = GetDB()
-        local found = false
-        for tag, alts in pairs(db.knownAlts) do
-            if tag:lower():find(searchTag:lower()) then
-                print("|cFF69CCF0BuddyFlash:|r Known characters for |cFFFFFF00" .. tag .. "|r:")
-                for _, alt in ipairs(alts) do
-                    print("  |cFFFFFFFF" .. alt .. "|r")
-                end
-                found = true
-            end
-        end
-        if not found then
-            print("|cFF69CCF0BuddyFlash:|r No alt data for '" .. searchTag .. "'")
-        end
-
-    -- /bf alts (list all)
-    elseif cmd == "alts" then
-        local db = GetDB()
-        local count = 0
-        print("|cFF69CCF0BuddyFlash - Known Alts:|r")
-        for tag, alts in pairs(db.knownAlts) do
-            if #alts > 1 then
-                print("  |cFFFFFF00" .. tag .. "|r: " .. table.concat(alts, ", "))
-                count = count + 1
-            end
-        end
-        if count == 0 then
-            print("  |cFF888888No multi-character data yet. Play more to discover alts!|r")
         end
 
     elseif cmd == "avatars" then
