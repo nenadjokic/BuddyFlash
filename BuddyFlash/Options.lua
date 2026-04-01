@@ -947,18 +947,19 @@ local function RefreshFriendList()
             row.avatar:SetAlpha(0.6)
         end
 
-        -- Name display
+        -- Name display (strip #discriminator for cleaner display)
         local displayName
+        local displayTag = (friend.bnetTag or ""):match("^(.+)#%d+$") or friend.bnetTag or "?"
         local statusTag = ""
         if friend.isAFK then statusTag = " |cFFFFCC00[Away]|r"
         elseif friend.isDND then statusTag = " |cFFFF4444[Busy]|r" end
 
         if friend.isOnline and friend.charName then
-            displayName = friend.charName .. " |cFF888888(" .. friend.bnetTag .. ")|r" .. statusTag
+            displayName = friend.charName .. " |cFF888888(" .. displayTag .. ")|r" .. statusTag
         elseif friend.isOnline then
-            displayName = "|cFFFFFFAA" .. friend.bnetTag .. "|r" .. statusTag
+            displayName = "|cFFFFFFAA" .. displayTag .. "|r" .. statusTag
         else
-            displayName = "|cFF777777" .. friend.bnetTag .. "|r"
+            displayName = "|cFF777777" .. displayTag .. "|r"
         end
         row.nameText:SetText(displayName)
 

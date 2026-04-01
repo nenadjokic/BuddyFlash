@@ -3,7 +3,7 @@
 
 local addonName, ns = ...
 
-local BUDDYFLASH_VERSION = "1.0.5"
+local BUDDYFLASH_VERSION = "1.0.6"
 ns.VERSION = BUDDYFLASH_VERSION
 ns.SUPPORT_PAYPAL = "paypal.me/nenadjokicRS"
 ns.SUPPORT_COFFEE = "buymeacoffee.com/nenadjokic"
@@ -669,7 +669,9 @@ local function CollectOnlineFriends()
             local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
             if accountInfo and accountInfo.gameAccountInfo and accountInfo.gameAccountInfo.isOnline then
                 local gameInfo = accountInfo.gameAccountInfo
-                local bnetTag = accountInfo.accountName or "?"
+                -- Use battleTag (stable "Name#1234") instead of accountName (unstable KString)
+                local bnetTag = accountInfo.battleTag or accountInfo.accountName or "?"
+                local displayTag = bnetTag:match("^(.+)#%d+$") or bnetTag
                 local charName = gameInfo.characterName
                 local classFile = gameInfo.className and gameInfo.classFile
                 local level = gameInfo.characterLevel
@@ -679,10 +681,10 @@ local function CollectOnlineFriends()
                 if clientProgram == "WoW" and charName then
                     local colorHex = GetClassColor(classFile)
                     table.insert(online, {
-                        sortName = bnetTag,
-                        display = string.format("|cFF%s%s|r |cFF888888(%s)|r", colorHex, charName, bnetTag),
+                        sortName = displayTag,
+                        display = string.format("|cFF%s%s|r |cFF888888(%s)|r", colorHex, charName, displayTag),
                         key = "bnet_" .. (accountInfo.bnetAccountID or i),
-                        name = bnetTag .. " (" .. charName .. ")",
+                        name = displayTag .. " (" .. charName .. ")",
                         charName = charName,
                         bnetTag = bnetTag,
                         bnetAccountID = accountInfo.bnetAccountID,
@@ -691,10 +693,10 @@ local function CollectOnlineFriends()
                     })
                 elseif clientProgram == "WoW" then
                     table.insert(online, {
-                        sortName = bnetTag,
-                        display = "|cFFAAAAFF" .. bnetTag .. "|r",
+                        sortName = displayTag,
+                        display = "|cFFAAAAFF" .. displayTag .. "|r",
                         key = "bnet_" .. (accountInfo.bnetAccountID or i),
-                        name = bnetTag,
+                        name = displayTag,
                         charName = nil,
                         bnetTag = bnetTag,
                         bnetAccountID = accountInfo.bnetAccountID,
@@ -891,7 +893,7 @@ local function CollectAllBNetFriends()
     for i = 1, numBNet do
         local accountInfo = C_BattleNet.GetFriendAccountInfo(i)
         if accountInfo then
-            local bnetTag = accountInfo.accountName or "?"
+            local bnetTag = accountInfo.battleTag or accountInfo.accountName or "?"
             local isOnline = false
             local charName = nil
             local classFile = nil
@@ -996,6 +998,68 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if BNConnected() then
             -- Build initial state (don't flash for people already online at login)
             C_Timer.After(3, function()
+                -- Migrate KString keys to stable battleTag keys
+                local function MigrateKStringKeys()
+                    -- Build mapping: KString accountName -> battleTag
+                    local ksMap = {}
+                    local numBNet = BNGetNumFriends()
+                    for fi = 1, numBNet do
+                        local acctInfo = C_BattleNet.GetFriendAccountInfo(fi)
+                        if acctInfo and acctInfo.accountName and acctInfo.battleTag then
+                            local accName = acctInfo.accountName
+                            if accName:find("|K") then
+                                ksMap[accName] = acctInfo.battleTag
+                            end
+                        end
+                    end
+                    -- Re-key tables that had KString keys
+                    local function migrateTable(tbl)
+                        if not tbl then return end
+                        local toMigrate = {}
+                        for key, val in pairs(tbl) do
+                            if key:find("|K") and ksMap[key] then
+                                toMigrate[key] = ksMap[key]
+                            end
+                        end
+                        for oldKey, newKey in pairs(toMigrate) do
+                            if not tbl[newKey] then
+                                tbl[newKey] = tbl[oldKey]
+                            end
+                            tbl[oldKey] = nil
+                        end
+                    end
+                    migrateTable(db.avatars)
+                    migrateTable(db.friendSounds)
+                    migrateTable(db.autoWhisper)
+                    migrateTable(db.knownAlts)
+                    -- Also clean up lastSeen and loginHistory bnetTag fields
+                    for key, data in pairs(db.lastSeen) do
+                        if type(data) == "table" and data.bnetTag and data.bnetTag:find("|K") and ksMap[data.bnetTag] then
+                            local newTag = ksMap[data.bnetTag]
+                            local displayTag = newTag:match("^(.+)#%d+$") or newTag
+                            data.bnetTag = newTag
+                            if data.charName then
+                                data.name = displayTag .. " (" .. data.charName .. ")"
+                            else
+                                data.name = displayTag
+                            end
+                        end
+                    end
+                    for _, entry in ipairs(db.loginHistory) do
+                        if entry.bnetTag and entry.bnetTag:find("|K") and ksMap[entry.bnetTag] then
+                            local newTag = ksMap[entry.bnetTag]
+                            local displayTag = newTag:match("^(.+)#%d+$") or newTag
+                            entry.bnetTag = newTag
+                            if entry.charName then
+                                entry.name = displayTag .. " (" .. entry.charName .. ")"
+                            else
+                                entry.name = displayTag
+                            end
+                        end
+                    end
+                end
+                MigrateKStringKeys()
+
                 local onlineFriends = CollectOnlineFriends()
                 for _, friend in ipairs(onlineFriends) do
                     previousOnline[friend.key] = { name = friend.name, charName = friend.charName, bnetTag = friend.bnetTag }
